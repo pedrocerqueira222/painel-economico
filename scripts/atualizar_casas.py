@@ -40,20 +40,6 @@ class ErroINE(Exception):
     """O INE respondeu, mas com uma mensagem de erro (por exemplo, trimestre ainda não publicado)."""
 
 
-def codigos_trimestres(recuar: int, hoje: datetime) -> list:
-    y, t = hoje.year, (hoje.month - 1) // 3 + 1 - recuar
-    while t < 1:
-        t += 4
-        y -= 1
-    out = []
-    for _ in range(TRIMESTRES):
-        out.insert(0, f"S5A{y}{t}")
-        t -= 1
-        if t < 1:
-            t, y = 4, y - 1
-    return out
-
-
 def pedir(params: dict, tentativas: int = 3) -> list:
     url = INE_URL + "?" + urllib.parse.urlencode({"op": "2", "lang": "PT", **params})
     ultimo = None
@@ -105,21 +91,116 @@ def registos(dados, codigo: str) -> dict:
     return out
 
 
-def buscar(nome: str, recuar: int, hoje: datetime) -> dict:
-    ultimo = None
-    for codigo in LOCALIDADES[nome]:
+def quarter_de_codigo(codigo: str):
+    """'S5A20261' -> '2026-Q1' (aceita também '...202601')."""
+    m = re.match(r"^S\dA(\d{4})0?([1-4])$", codigo)
+    return f"{m.group(1)}-Q{m.group(2)}" if m else None
+
+
+def codigos_da_ficha() -> list:
+    """Tenta ler da ficha (metainformação) do indicador os códigos de período que existem."""
+    url = INE_URL.replace("pindica.jsp", "pindicaMeta.jsp") + "?" + urllib.parse.urlencode({"varcd": INDICADOR, "lang": "PT"})
+    try:
+        req = urllib.request.Request(url, headers=CABECALHOS)
+        with urllib.request.urlopen(req, timeout=120) as r:
+            texto = r.read().decode("utf-8", "replace")
+    except Exception as e:
+        print(f"Ficha do indicador indisponível: {e}", file=sys.stderr)
+        return []
+    codigos = sorted(set(re.findall(r"S\dA\d{4}0?[1-4](?!\d)", texto)))
+    codigos = [c for c in codigos if quarter_de_codigo(c)]
+    print(f"Ficha do indicador: {len(codigos)} códigos de trimestre encontrados" + (f" ({codigos[0]} a {codigos[-1]})" if codigos else ""))
+    return codigos
+
+
+def tem_dados(dados) -> bool:
+    raiz = dados[0] if isinstance(dados, list) else dados
+    return bool(raiz.get("Dados"))
+
+
+def descobrir_formato(hoje: datetime):
+    """Experimenta formatos de código num trimestre já publicado até o INE aceitar um."""
+    y, t = hoje.year, (hoje.month - 1) // 3 + 1
+    candidatos_q = []
+    for _ in range(6):  # recua até 6 trimestres (o mais recente pode ainda não estar publicado)
+        t -= 1
+        if t < 1:
+            t, y = 4, y - 1
+        candidatos_q.append((y, t))
+    formatos = [lambda p, y, t: f"{p}{y}{t}", lambda p, y, t: f"{p}{y}0{t}"]
+    prefixos = ["S5A", "S3A", "S4A", "S6A", "S2A", "S1A", "S7A", "S8A", "S9A"]
+    for (yy, tt) in candidatos_q[1:3]:  # trimestres quase certamente já publicados
+        for f in formatos:
+            for p in prefixos:
+                codigo = f(p, yy, tt)
+                try:
+                    dados = pedir({"varcd": INDICADOR, "Dim1": codigo, "Dim2": "PT"}, tentativas=1)
+                    if tem_dados(dados):
+                        print(f"Formato aceite pelo INE: {codigo}")
+                        return lambda y, t, f=f, p=p: f(p, y, t)
+                except ErroINE:
+                    pass
+                except Exception as e:
+                    print(f"  {codigo}: {e}", file=sys.stderr)
+    return None
+
+
+def lista_trimestres(hoje: datetime, formato) -> list:
+    y, t = hoje.year, (hoje.month - 1) // 3 + 1
+    out = []
+    for _ in range(TRIMESTRES + 2):
+        out.append(formato(y, t))
+        t -= 1
+        if t < 1:
+            t, y = 4, y - 1
+    return out  # do mais recente para o mais antigo
+
+
+def recolher(hoje: datetime) -> dict:
+    """Pede um trimestre de cada vez (todas as localidades de uma vez) e junta os que interessam."""
+    codigos = codigos_da_ficha()
+    if codigos:
+        codigos = sorted(codigos, reverse=True)[:TRIMESTRES]
+    else:
+        formato = descobrir_formato(hoje)
+        if not formato:
+            raise RuntimeError("não foi possível descobrir o formato dos trimestres aceite pelo INE")
+        codigos = lista_trimestres(hoje, formato)
+
+    alvo = {c: nome for nome, cs in LOCALIDADES.items() for c in cs}
+    por_local = {n: {} for n in LOCALIDADES}
+    obtidos, falhas_seguidas = 0, 0
+    for codigo in codigos:
         try:
-            dados = pedir({"varcd": INDICADOR, "Dim1": ",".join(codigos_trimestres(recuar, hoje)), "Dim2": codigo})
-            valores = registos(dados, codigo)
-            if valores:
-                return valores
-        except ErroINE:
-            raise
-        except Exception as e:
-            ultimo = e
-    if ultimo:
-        raise ultimo
-    return {}
+            dados = pedir({"varcd": INDICADOR, "Dim1": codigo})
+        except ErroINE as e:
+            falhas_seguidas += 1
+            print(f"{codigo}: INE diz '{e}'", file=sys.stderr)
+            if obtidos and falhas_seguidas >= 3:
+                break  # chegámos ao início da série
+            continue
+        falhas_seguidas = 0
+        raiz = dados[0] if isinstance(dados, list) else dados
+        n_antes = sum(len(v) for v in por_local.values())
+        for rotulo, linhas in (raiz.get("Dados") or {}).items():
+            q = trimestre(rotulo) or quarter_de_codigo(codigo)
+            for l in linhas:
+                nome = alvo.get(l.get("geocod"))
+                if not nome:
+                    continue
+                cat = l.get("dim_3_t") or l.get("dim_3") or "Total"
+                if not (str(cat).lower().startswith("total") or l.get("dim_3") == "T"):
+                    continue
+                try:
+                    por_local[nome][q] = float(str(l.get("valor", "")).replace(" ", "").replace(",", "."))
+                except ValueError:
+                    pass
+        novos = sum(len(v) for v in por_local.values()) - n_antes
+        if novos:
+            obtidos += 1
+        print(f"{codigo}: {novos} valores")
+        time.sleep(0.5)
+    return por_local
 
 
 def main() -> int:
@@ -129,18 +210,13 @@ def main() -> int:
         with open(FICHEIRO, encoding="utf-8") as f:
             antigo = json.load(f)
 
-    por_local = {}
-    for nome in LOCALIDADES:
-        for recuar in (1, 2, 3):  # se o trimestre mais recente ainda não existir, recua
-            try:
-                por_local[nome] = buscar(nome, recuar, hoje)
-                print(f"{nome}: {len(por_local[nome])} trimestres")
-                break
-            except ErroINE as e:
-                print(f"{nome}: INE diz '{e}', a recuar um trimestre", file=sys.stderr)
-            except Exception as e:
-                print(f"{nome}: falhou ({e})", file=sys.stderr)
-                break
+    try:
+        por_local = recolher(hoje)
+    except Exception as e:
+        print(f"Falhou: {e}", file=sys.stderr)
+        por_local = {}
+    for nome, serie in por_local.items():
+        print(f"{nome}: {len(serie)} trimestres")
 
     if not any(por_local.values()):
         print("Nenhum dado obtido; o ficheiro fica como estava.", file=sys.stderr)
