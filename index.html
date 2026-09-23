@@ -15,6 +15,7 @@
     --gdp: #3A6EA5; --gdp-up: rgba(58,110,165,.45); --gdp-down: rgba(178,58,46,.45); --une: #7A4FB0;
     --pt: #17202B; --lis: #2A6CA3; --opo: #B7801A; --maia: #1F7A74; --val: #8A3B72; --mat: #C0562B;
     --hpi: #C0562B; --ratio: #5B6675; --l200: #8A3B72; --l100: #2A6CA3; --tax: #5B6675;
+    --cons: #2A6CA3; --inv: #B7801A; --gdp-l: #17202B; --tb-up: rgba(46,125,79,.45); --tb-down: rgba(178,58,46,.45); --ca: #17202B;
     --lic: rgba(183,128,26,.55); --lic-s: #B7801A; --con: rgba(31,122,116,.65); --con-s: #1F7A74;
     --sales: rgba(58,110,165,.5); --sales-s: #3A6EA5; --cred: #8A3B72;
     --imm-b: rgba(46,125,79,.5); --imm-s: #2E7D4F; --emi-b: rgba(192,86,43,.45); --emi-s: #C0562B; --net-s: #17202B;
@@ -31,6 +32,7 @@
       --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
       --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
       --hpi: #EE8E62; --ratio: #9AA6B4; --l200: #CF7FB5; --l100: #6FA8DC; --tax: #9AA6B4;
+      --cons: #6FA8DC; --inv: #E0AE4A; --gdp-l: #E7ECF1; --tb-up: rgba(108,194,148,.45); --tb-down: rgba(229,122,110,.45); --ca: #E7ECF1;
       --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
       --sales: rgba(127,168,218,.5); --sales-s: #7FA8DA; --cred: #CF7FB5;
       --imm-b: rgba(108,194,148,.5); --imm-s: #6CC294; --emi-b: rgba(238,142,98,.45); --emi-s: #EE8E62; --net-s: #E7ECF1;
@@ -44,6 +46,7 @@
     --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
     --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
     --hpi: #EE8E62; --ratio: #9AA6B4; --l200: #CF7FB5; --l100: #6FA8DC; --tax: #9AA6B4;
+    --cons: #6FA8DC; --inv: #E0AE4A; --gdp-l: #E7ECF1; --tb-up: rgba(108,194,148,.45); --tb-down: rgba(229,122,110,.45); --ca: #E7ECF1;
     --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
     --sales: rgba(127,168,218,.5); --sales-s: #7FA8DA; --cred: #CF7FB5;
     --imm-b: rgba(108,194,148,.5); --imm-s: #6CC294; --emi-b: rgba(238,142,98,.45); --emi-s: #EE8E62; --net-s: #E7ECF1;
@@ -190,7 +193,8 @@ const prevQ = (q, n = 1) => { let [y, t] = q.split("-Q").map(Number); t -= n; wh
 // variação com cor: goodWhenUp = true → subir fica verde
 function deltaHTML(a, b, label, d, goodWhenUp = false, unit = "") {
   if (a == null || b == null) return "";
-  const x = a - b;
+  let x = a - b;
+  if (Math.abs(x) < 0.5 * Math.pow(10, -d)) x = 0;   // evita "−0,0"
   const good = goodWhenUp ? x > 0.0005 : x < -0.0005, bad = goodWhenUp ? x < -0.0005 : x > 0.0005;
   return `<span><span class="${good ? "down" : bad ? "up" : ""}">${sign(x)}${fmt(Math.abs(x), d)}${unit}</span> ${label}</span>`;
 }
@@ -1321,8 +1325,172 @@ const MIGR = {
   yTick: v => fmt(v / 1000, 0) + " mil",
 };
 
+/* =====================================================================
+   MÓDULO — Consumo e investimento (contas nacionais, BCE)
+   ===================================================================== */
+// escolhe, entre várias séries do BCE, a mais recente e com as características preferidas
+function pickBest(rows, test, rank) {
+  const series = {};
+  for (const r of rows) if (r.v != null && test(r.key.split("."))) (series[r.key] ||= {})[r.t] = r.v;
+  const last = k => Object.keys(series[k]).sort().pop();
+  const keys = Object.keys(series).sort((a, b) => last(b).localeCompare(last(a)) || rank(a.split(".")) - rank(b.split(".")));
+  return keys.length ? series[keys[0]] : null;
+}
+const mnaKey = (sto, prices) => ["Q", "", "PT", "", "", "", "", sto, "", "", "", "", prices, "N"].join(".");
+const yoyMap = m => { const o = {}; for (const q in m) { const b = m[prevQ(q, 4)]; if (b) o[q] = (m[q] / b - 1) * 100; } return o; };
+const adjRank = a => (["Y", "S", "N", "W"].indexOf(a) + 1 || 9);
+const unitRank = u => (["EUR", "XDC"].indexOf(u) + 1 || 9);
+
+const ECOCOMP = {
+  key: "ecocomp",
+  title: "Consumo e investimento",
+  defaultYears: 5, perYear: 4,
+  source: `Crescimento real (sem efeito dos preços) face ao mesmo trimestre do ano anterior, em Portugal.
+    Consumo: despesa das famílias (cerca de 60% do PIB). Investimento: formação bruta de capital fixo, ou seja casas, fábricas, máquinas, estradas (cerca de 20% do PIB).
+    Fonte: contas nacionais trimestrais do INE, <a href="https://data.ecb.europa.eu/data/datasets/MNA" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "CONS", label: "Consumo das famílias", short: "Consumo",      color: "--cons" },
+    { id: "INV",  label: "Investimento",          short: "Investimento", color: "--inv" },
+    { id: "GDP",  label: "PIB",                    short: "PIB",          color: "--gdp-l", dashed: true },
+  ],
+  async load() {
+    const rows = await getCSV(ECB + "MNA/" + mnaKey("P31+P51G+B1GQ", "LR") + "?format=csvdata&startPeriod=1999-Q1");
+    // posições na chave: 2 ajustamento, 5 setor, 8 operação, 9 ativo, 12 unidade
+    const cons = pickBest(rows, p => p[8] === "P31" && ["S1M", "S14_S15", "S14"].includes(p[5]),
+                          p => ["S1M", "S14_S15", "S14"].indexOf(p[5]) * 100 + adjRank(p[2]) * 10 + unitRank(p[12]));
+    const inv = pickBest(rows, p => p[8] === "P51G" && p[5] === "S1" && ["N11G", "_Z", "N1G"].includes(p[9]),
+                         p => ["N11G", "N1G", "_Z"].indexOf(p[9]) * 100 + adjRank(p[2]) * 10 + unitRank(p[12]));
+    const gdp = pickBest(rows, p => p[8] === "B1GQ" && p[5] === "S1", p => adjRank(p[2]) * 10 + unitRank(p[12]));
+    const errors = [];
+    if (!cons) errors.push("consumo: sem dados"); if (!inv) errors.push("investimento: sem dados");
+    const Y = { CONS: yoyMap(cons || {}), INV: yoyMap(inv || {}), GDP: yoyMap(gdp || {}) };
+    const periods = [...new Set(Object.values(Y).flatMap(Object.keys))].sort();
+    if (!periods.length) throw new Error("o BCE não devolveu valores das contas nacionais");
+    return { periods, values: Object.fromEntries(Object.entries(Y).map(([k, m]) => [k, periods.map(q => m[q] ?? null)])), errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const C = d.values.CONS, I = d.values.INV, G = d.values.GDP;
+    let i = d.periods.length - 1; while (i >= 0 && (C[i] == null || I[i] == null)) i--;
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const c = C[i], v = I[i], g = G[i];
+    let text, color;
+    if (c < 0 && v < 0) { text = "Consumo e investimento estão a travar a economia"; color = "var(--up)"; }
+    else if (c >= 1 && v >= 1) { text = v > c + 2 ? "O investimento está a puxar pela economia, com o consumo a ajudar" : "Consumo e investimento estão a sustentar a economia"; color = "var(--down)"; }
+    else if (c >= 1) { text = "É o consumo das famílias que está a sustentar a economia"; color = "var(--flat)"; }
+    else if (v >= 1) { text = "É o investimento que está a sustentar a economia"; color = "var(--flat)"; }
+    else { text = "Consumo e investimento crescem pouco"; color = "var(--flat)"; }
+    const v1 = x => (x >= 0 ? "cresceu " : "caiu ") + fmt(Math.abs(x), 1) + "%";
+    let msg = `No ${qLong(d.periods[i])}, face a um ano antes, o consumo das famílias ${v1(c)} e o investimento ${v1(v)}` + (g != null ? `, com o PIB a crescer ${fmt(g, 1)}%.` : ".");
+    const c4 = C[i - 4], i4 = I[i - 4];
+    if (c4 != null && i4 != null) msg += ` Há um ano, o consumo crescia ${fmt(c4, 1)}% e o investimento ${fmt(i4, 1)}%.`;
+    msg += " Como o consumo pesa cerca de três vezes mais do que o investimento no PIB, uma subida de 1% no consumo vale mais para a economia do que 1% no investimento.";
+    return { text, color, msg };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + qLabel(d.periods[i]) : ""), value: i >= 0 ? a[i] : null, d: 1, unit: "%", signed: true,
+               deltas: (i >= 0 ? "<span>crescimento real num ano</span>" : "") + deltaHTML(a[i], a[i - 1], "vs trimestre anterior", 1, true, " p.p.") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id],
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: s.dashed ? 2 : 2.5, borderDash: s.dashed ? [5, 4] : [],
+      pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: s.dashed ? 2 : 1 }));
+  },
+  label: qLabel,
+  tooltip: (s, v) => ` ${s.short}: ${sign(v)}${fmt(Math.abs(v), 1)}%`,
+  yTick: v => fmt(v, 0) + "%",
+};
+
+/* =====================================================================
+   MÓDULO — Contas com o exterior (BCE)
+   ===================================================================== */
+const TRADE = {
+  key: "trade",
+  title: "Contas com o exterior",
+  defaultYears: 10, perYear: 4,
+  source: `Saldo de bens e serviços: exportações menos importações. Balança corrente: esse saldo mais os rendimentos (juros, dividendos, salários) e as transferências (por exemplo, remessas de emigrantes e fundos europeus) trocados com o exterior.
+    Ambos somados nos últimos 12 meses e em % do PIB, para não depender das épocas do ano (o turismo pesa muito no verão).
+    Fonte: contas nacionais do INE e balança de pagamentos do Banco de Portugal, <a href="https://data.ecb.europa.eu/data/datasets/BP6" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "TB", label: "Saldo de bens e serviços", short: "Bens e serviços", color: "--tb-up" },
+    { id: "CA", label: "Balança corrente",          short: "Balança corrente", color: "--ca" },
+  ],
+  async load(prev) {
+    const [mna, bop] = await Promise.allSettled([
+      getCSV(ECB + "MNA/" + mnaKey("P6+P7+B1GQ", "V") + "?format=csvdata&startPeriod=1999-Q1"),
+      getCSV(ECB + "BP6/Q.N.PT.W1.S1.S1.T.B.CA._Z._Z._Z.EUR._T._X.N?format=csvdata&startPeriod=1999-Q1"),
+    ]);
+    if (mna.status === "rejected") throw new Error(mna.reason.message);
+    const rows = mna.value, errors = [];
+    const byArea = p => ["W1", "W0", "W2"].indexOf(p[4]) + 1 || 9;
+    const adjN = a => (["N", "Y", "S", "W"].indexOf(a) + 1 || 9);
+    const exp = pickBest(rows, p => p[8] === "P6" && p[5] === "S1", p => byArea(p) * 100 + adjN(p[2]) * 10 + unitRank(p[12]));
+    const imp = pickBest(rows, p => p[8] === "P7" && p[5] === "S1", p => byArea(p) * 100 + adjN(p[2]) * 10 + unitRank(p[12]));
+    const gdp = pickBest(rows, p => p[8] === "B1GQ" && p[5] === "S1", p => adjN(p[2]) * 10 + unitRank(p[12]));
+    if (!exp || !imp || !gdp) throw new Error("o BCE não devolveu exportações, importações ou PIB de Portugal");
+    let ca = prev?.caQ || {};
+    if (bop.status === "fulfilled") { ca = {}; for (const r of bop.value) if (r.v != null) ca[r.t] = r.v; }
+    else errors.push("balança corrente: " + bop.reason.message);
+    const qs = Object.keys(gdp).sort();
+    const roll = (m, q) => { let t = 0; for (let k = 0; k < 4; k++) { const v = m[prevQ(q, k)]; if (v == null) return null; t += v; } return t; };
+    const periods = [], TB = [], CA = [], EXP = [], IMP = [];
+    for (const q of qs) {
+      const g = roll(gdp, q); if (g == null) continue;
+      const e = roll(exp, q), m = roll(imp, q), c = roll(ca, q);
+      periods.push(q);
+      TB.push(e != null && m != null ? (e - m) / g * 100 : null);
+      CA.push(c != null ? c / g * 100 : null);
+      EXP.push(e); IMP.push(m);
+    }
+    return { periods, values: { TB, CA }, exp12: EXP, imp12: IMP, caQ: ca, errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const T = d.values.TB, C = d.values.CA;
+    const iC = lastIdx(C), iT = lastIdx(T);
+    const main = iC >= 0 ? C[iC] : iT >= 0 ? T[iT] : null;
+    if (main == null) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    let text, color;
+    if (main >= 0.5) { text = "Portugal está a ganhar dinheiro face ao exterior"; color = "var(--down)"; }
+    else if (main <= -0.5) { text = "Portugal está a gastar mais do que ganha face ao exterior"; color = "var(--up)"; }
+    else { text = "As contas de Portugal com o exterior estão equilibradas"; color = "var(--flat)"; }
+    const bil = v => fmt(v / 1000, 1) + " mil milhões de euros";
+    let msg = "";
+    if (iT >= 0) {
+      const e = d.exp12[iT], m = d.imp12[iT], e4 = d.exp12[iT - 4], m4 = d.imp12[iT - 4];
+      msg += `Nos 12 meses até ao ${qLong(d.periods[iT])}, Portugal exportou ${bil(e)} e importou ${bil(m)}: um ${T[iT] >= 0 ? "excedente" : "défice"} de ${fmt(Math.abs(T[iT]), 1)}% do PIB em bens e serviços.`;
+      if (e4 && m4) msg += ` Num ano, as exportações ${e >= e4 ? "subiram" : "desceram"} ${fmt(Math.abs((e / e4 - 1) * 100), 1)}% e as importações ${m >= m4 ? "subiram" : "desceram"} ${fmt(Math.abs((m / m4 - 1) * 100), 1)}%.`;
+    }
+    if (iC >= 0) {
+      msg += ` Juntando rendimentos e transferências, a balança corrente está em ${sign(C[iC])}${fmt(Math.abs(C[iC]), 1)}% do PIB` +
+             (C[iC - 4] != null ? ` (${sign(C[iC - 4])}${fmt(Math.abs(C[iC - 4]), 1)}% um ano antes).` : ".");
+      msg += C[iC] >= 0 ? " Ou seja, o país recebe do exterior mais do que paga e não precisa de se endividar lá fora." : " Ou seja, o país paga ao exterior mais do que recebe e tem de se financiar lá fora.";
+    }
+    return { text, color, msg: msg.trim() };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + (i >= 0 ? " · 12 meses até " + qLabel(d.periods[i]) : ""), value: i >= 0 ? a[i] : null, d: 1, unit: "% do PIB", signed: true,
+               deltas: deltaHTML(a[i], a[i - 4], "vs um ano antes", 1, true, " p.p.") + deltaHTML(a[i], a[i - 1], "vs trimestre anterior", 1, true, " p.p.") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    const data = d.values.TB.slice(start, end), up = css("--tb-up"), down = css("--tb-down");
+    return [
+      { type: "bar", label: this.series[0].label, data, hidden: !visible.TB, backgroundColor: data.map(v => v >= 0 ? up : down), borderWidth: 0, borderRadius: 2, maxBarThickness: 16, order: 2 },
+      { type: "line", label: this.series[1].label, data: d.values.CA.slice(start, end), hidden: !visible.CA, borderColor: css("--ca"), backgroundColor: css("--ca"),
+        borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+    ];
+  },
+  label: qLabel,
+  tooltip: (s, v) => ` ${s.short}: ${sign(v)}${fmt(Math.abs(v), 1)}% do PIB`,
+  yTick: v => fmt(v, 0) + "%",
+};
+
 /* ---------- ordem dos gráficos ---------- */
-const MODULES = [INFWAGE, BCEEUR, GDPUNE, HOUSE, HOUSEWAGE, RENT, MORT, BUILD, DEMAND, MIGR];
+const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, HOUSE, HOUSEWAGE, RENT, MORT, BUILD, DEMAND, MIGR];
 
 /* ---------- construção e desenho genéricos ---------- */
 const state = {};
