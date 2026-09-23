@@ -1,0 +1,40 @@
+name: Atualizar preço das casas
+
+on:
+  schedule:
+    - cron: "0 7 * * *"      # todos os dias às 7h (hora UTC)
+  workflow_dispatch:          # permite correr à mão no separador Actions
+  push:
+    paths:
+      - "scripts/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: write
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ir buscar os dados ao INE
+        run: python scripts/atualizar_casas.py
+      - name: Guardar se houver dados novos
+        run: |
+          git config user.name "atualizador"
+          git config user.email "atualizador@users.noreply.github.com"
+          # uma vez por mês regista a verificação: o GitHub desliga tarefas de repositórios parados há 60 dias
+          if [ "$(date +%d)" = "01" ] || [ ! -f dados/verificado.txt ]; then
+            mkdir -p dados && date -u +"Última verificação: %Y-%m-%d %H:%M UTC" > dados/verificado.txt
+          fi
+          git add dados/
+          if git diff --cached --quiet; then
+            echo "Sem dados novos."
+          else
+            git commit -m "Preço das casas: dados atualizados do INE" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+            git push
+          fi
