@@ -14,6 +14,7 @@
     --inf: #C0562B; --wag: #1F7A74; --real-up: rgba(46,125,79,.35); --real-down: rgba(178,58,46,.35); --real: #5B6675;
     --gdp: #3A6EA5; --gdp-up: rgba(58,110,165,.45); --gdp-down: rgba(178,58,46,.45); --une: #7A4FB0;
     --pt: #17202B; --lis: #2A6CA3; --opo: #B7801A; --maia: #1F7A74; --val: #8A3B72; --mat: #C0562B;
+    --hpi: #C0562B; --ratio: #5B6675;
     --up: #B23A2E; --down: #2E7D4F; --flat: #5B6675;
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top, 0px);
@@ -26,6 +27,7 @@
       --inf: #EE8E62; --wag: #5CC2B8; --real-up: rgba(108,194,148,.35); --real-down: rgba(229,122,110,.35); --real: #9AA6B4;
       --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
       --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
+      --hpi: #EE8E62; --ratio: #9AA6B4;
       --up: #E57A6E; --down: #6CC294; --flat: #9AA6B4;
     }
   }
@@ -35,6 +37,7 @@
     --inf: #EE8E62; --wag: #5CC2B8; --real-up: rgba(108,194,148,.35); --real-down: rgba(229,122,110,.35); --real: #9AA6B4;
     --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
     --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
+    --hpi: #EE8E62; --ratio: #9AA6B4;
     --up: #E57A6E; --down: #6CC294; --flat: #9AA6B4;
   }
   *, *::before, *::after { box-sizing: inherit; }
@@ -778,8 +781,133 @@ const HOUSE = {
   yTick: v => fmt(v, 0) + " €",
 };
 
+/* =====================================================================
+   BLOCO HABITAÇÃO — Preços das casas vs salários (BCE)
+   ===================================================================== */
+const HOUSEWAGE = {
+  key: "housewage",
+  container: "modules-hab",
+  title: "Preços das casas vs salários",
+  defaultYears: 5, perYear: 4,
+  source: `Casas: índice de preços da habitação em Portugal (INE, publicado pelo Eurostat), todas as casas vendidas, novas e usadas.
+    Salários: remuneração média por trabalhador em Portugal (contas nacionais do INE).
+    As duas séries começam em 100 no início do período escolhido. A linha cinzenta mostra o preço das casas dividido pelos salários:
+    acima de 100 quer dizer que, com o mesmo salário, se compra menos casa do que no início do período.
+    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/RESR" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "HPI",   label: "Preço das casas",           short: "Casas",    color: "--hpi" },
+    { id: "WAG",   label: "Salários",                  short: "Salários", color: "--wag" },
+    { id: "RATIO", label: "Casas face aos salários",   short: "Casas ÷ salários", color: "--ratio", dashed: true },
+  ],
+  async load(prev) {
+    const [hpi, wag] = await Promise.allSettled([
+      getCSV(ECB + "RESR/Q.PT._T.N._TR.TVAL..TB.N.IX?format=csvdata&startPeriod=2000-Q1"),
+      getCSV(ECB + "MNA/Q..PT.W2.S1.S1._Z.COM_PS._Z.._Z.IX.V.N?format=csvdata&startPeriod=2000-Q1"),
+    ]);
+    if (hpi.status === "rejected" && wag.status === "rejected") throw new Error(hpi.reason.message);
+    const errors = [];
+    const pickSeries = (rows, keyOf, rankOf, rankFirst = false) => {
+      const series = {};
+      for (const r of rows) if (r.v != null) (series[keyOf(r.key)] ||= {})[r.t] = r.v;
+      const last = id => Object.keys(series[id]).sort().pop();
+      const ids = Object.keys(series).sort((a, b) => rankFirst ? (rankOf(a) - rankOf(b) || last(b).localeCompare(last(a)))
+                                                                : (last(b).localeCompare(last(a)) || rankOf(a) - rankOf(b)));
+      return ids.length ? series[ids[0]] : null;
+    };
+    let H = prev?.levels?.HPI || {}, W = prev?.levels?.WAG || {};
+    if (hpi.status === "fulfilled") {
+      // fornecedor: 4D0 = INE/Eurostat (oficial), depois BCE e Confidencial Imobiliário
+      const p = pickSeries(hpi.value, k => k.split(".")[7], id => ["4D0", "4F0", "29"].indexOf(id) + 1 || 9, true);
+      if (p) H = p; else errors.push("preço das casas: o BCE não tem valores para Portugal");
+    } else errors.push("preço das casas: " + hpi.reason.message);
+    if (wag.status === "fulfilled") {
+      const p = pickSeries(wag.value.filter(r => r.key.split(".")[10] === "_T"), k => k.split(".")[2], id => ["Y", "S", "N", "W"].indexOf(id) + 1 || 9);
+      if (p) W = p; else errors.push("salários: o BCE não tem valores para Portugal");
+    } else errors.push("salários: " + wag.reason.message);
+    const periods = [...new Set([...Object.keys(H), ...Object.keys(W)])].sort();
+    return { periods, levels: { HPI: H, WAG: W },
+             values: { HPI: periods.map(q => H[q] ?? null), WAG: periods.map(q => W[q] ?? null) },
+             errors, fetchedAt: Date.now() };
+  },
+  // período visível e trimestre base (primeiro com os dois valores)
+  range(d) {
+    const st = state[this.key];
+    let end = -1;
+    for (const id of ["HPI", "WAG"]) end = Math.max(end, lastIdx(d.values[id]));
+    end += 1;
+    const start = st.years ? Math.max(0, end - st.years * this.perYear) : 0;
+    let base = -1;
+    for (let k = start; k < end; k++) if (d.values.HPI[k] != null && d.values.WAG[k] != null) { base = k; break; }
+    let both = -1;
+    for (let k = end - 1; k >= 0; k--) if (d.values.HPI[k] != null && d.values.WAG[k] != null) { both = k; break; }
+    return { start, end, base, both };
+  },
+  chartData(d) {
+    const { base } = this.range(d);
+    const H = d.values.HPI, W = d.values.WAG;
+    if (base < 0) return { periods: d.periods, values: { HPI: H.map(() => null), WAG: W.map(() => null), RATIO: H.map(() => null) } };
+    const hb = H[base], wb = W[base];
+    return { periods: d.periods, values: {
+      HPI: H.map(v => v == null ? null : v / hb * 100),
+      WAG: W.map(v => v == null ? null : v / wb * 100),
+      RATIO: H.map((v, k) => v == null || W[k] == null ? null : (v / hb) / (W[k] / wb) * 100),
+    } };
+  },
+  verdict(d) {
+    const { base, both } = this.range(d);
+    if (base < 0 || both < 4) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const H = d.values.HPI, W = d.values.WAG;
+    const hy = (H[both] / H[both - 4] - 1) * 100, wy = (W[both] / W[both - 4] - 1) * 100;
+    const ry = ((H[both] / H[both - 4]) / (W[both] / W[both - 4]) - 1) * 100;
+    let text, color;
+    if (ry >= 3) { text = "As casas estão a ficar mais caras face aos salários"; color = "var(--up)"; }
+    else if (ry <= -3) { text = "As casas estão a ficar mais acessíveis face aos salários"; color = "var(--down)"; }
+    else { text = "Casas e salários estão a subir a um ritmo parecido"; color = "var(--flat)"; }
+
+    const hp = (H[both] / H[base] - 1) * 100, wp = (W[both] / W[base] - 1) * 100;
+    const rp = ((H[both] / H[base]) / (W[both] / W[base]) - 1) * 100;
+    const v = x => (x >= 0 ? "subiram " : "desceram ") + fmt(Math.abs(x), 0) + "%";
+    let msg = `No último ano, até ao ${qLong(d.periods[both])}, os preços das casas ${v(hy)} e os salários ${v(wy)}.`;
+    if (base < both) {
+      msg += ` Desde o ${qLong(d.periods[base])}, as casas ${v(hp)} e os salários ${v(wp)}.`;
+      msg += Math.abs(rp) < 1 ? " Comprar casa custa hoje o mesmo esforço que no início do período."
+           : rp > 0 ? ` Ou seja, comprar casa exige hoje ${fmt(rp, 0)}% mais salário do que no início do período.`
+           : ` Ou seja, comprar casa exige hoje ${fmt(Math.abs(rp), 0)}% menos salário do que no início do período.`;
+    }
+    return { text, color, msg };
+  },
+  rates(d) {
+    const { base, both } = this.range(d);
+    const H = d.values.HPI, W = d.values.WAG, iH = lastIdx(H), iW = lastIdx(W);
+    const yoy = (a, k) => k >= 4 && a[k - 4] ? (a[k] / a[k - 4] - 1) * 100 : null;
+    const since = (a, k) => base >= 0 && k >= 0 && a[base] ? (a[k] / a[base] - 1) * 100 : null;
+    const rNow = base >= 0 && both >= 0 ? (H[both] / H[base]) / (W[both] / W[base]) * 100 : null;
+    const rYoy = both >= 4 ? ((H[both] / H[both - 4]) / (W[both] / W[both - 4]) - 1) * 100 : null;
+    const bl = base >= 0 ? "desde " + qLabel(d.periods[base]) : "";
+    return [
+      { id: "HPI", name: "Preço das casas" + (iH >= 0 ? " · " + qLabel(d.periods[iH]) : ""), value: yoy(H, iH), d: 1, unit: "%", signed: true,
+        deltas: "<span>face a um ano antes</span>" + deltaHTML(since(H, iH), 0, bl, 0, false, "%") },
+      { id: "WAG", name: "Salários" + (iW >= 0 ? " · " + qLabel(d.periods[iW]) : ""), value: yoy(W, iW), d: 1, unit: "%", signed: true,
+        deltas: "<span>face a um ano antes</span>" + deltaHTML(since(W, iW), 0, bl, 0, true, "%") },
+      { id: "RATIO", name: "Casas face aos salários" + (both >= 0 ? " · " + qLabel(d.periods[both]) : ""), value: rNow, d: 0, unit: "",
+        deltas: (base >= 0 ? `<span>índice, ${qLabel(d.periods[base])} = 100</span>` : "") + deltaHTML(rYoy, 0, "vs há um ano", 1, false, "%") },
+    ];
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({
+      type: "line", label: s.label, data: d.values[s.id].slice(start, end),
+      borderColor: css(s.color), backgroundColor: css(s.color),
+      borderWidth: s.dashed ? 2 : 2.5, borderDash: s.dashed ? [5, 4] : [], pointRadius: 0, pointHoverRadius: 4,
+      tension: 0.2, spanGaps: true, hidden: !visible[s.id], order: s.dashed ? 2 : 1,
+    }));
+  },
+  label: qLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 1)}`,
+  yTick: v => fmt(v, 0),
+};
+
 /* ---------- ordem dos gráficos ---------- */
-const MODULES = [INFWAGE, BCEEUR, GDPUNE, HOUSE];
+const MODULES = [INFWAGE, BCEEUR, GDPUNE, HOUSE, HOUSEWAGE];
 
 /* ---------- construção e desenho genéricos ---------- */
 const state = {};
