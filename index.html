@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boletim Económico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EEF1F4; --surface: #FFFFFF; --ink: #17202B; --muted: #5B6675; --line: #D5DBE2;
+    --bce: #17202B; --m3: #2A6CA3; --m6: #B7801A; --m12: #8A3B72;
+    --inf: #C0562B; --wag: #1F7A74; --real-up: rgba(46,125,79,.35); --real-down: rgba(178,58,46,.35); --real: #5B6675;
+    --gdp: #3A6EA5; --gdp-up: rgba(58,110,165,.45); --gdp-down: rgba(178,58,46,.45); --une: #7A4FB0;
+    --pt: #17202B; --lis: #2A6CA3; --opo: #B7801A; --maia: #1F7A74; --val: #8A3B72; --mat: #C0562B;
+    --up: #B23A2E; --down: #2E7D4F; --flat: #5B6675;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10161D; --surface: #18212B; --ink: #E7ECF1; --muted: #9AA6B4; --line: #2B3642;
+      --bce: #E7ECF1; --m3: #6FA8DC; --m6: #E0AE4A; --m12: #CF7FB5;
+      --inf: #EE8E62; --wag: #5CC2B8; --real-up: rgba(108,194,148,.35); --real-down: rgba(229,122,110,.35); --real: #9AA6B4;
+      --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
+      --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
+      --up: #E57A6E; --down: #6CC294; --flat: #9AA6B4;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10161D; --surface: #18212B; --ink: #E7ECF1; --muted: #9AA6B4; --line: #2B3642;
+    --bce: #E7ECF1; --m3: #6FA8DC; --m6: #E0AE4A; --m12: #CF7FB5;
+    --inf: #EE8E62; --wag: #5CC2B8; --real-up: rgba(108,194,148,.35); --real-down: rgba(229,122,110,.35); --real: #9AA6B4;
+    --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
+    --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
+    --up: #E57A6E; --down: #6CC294; --flat: #9AA6B4;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "tnum" 1; line-height: 1.45; font-size: 15px;
+  }
+  main { max-width: 1000px; margin: 0 auto; padding: 1.75rem 1.25rem 2.5rem; }
+
+  .top { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: baseline; justify-content: space-between;
+         border-bottom: 1px solid var(--line); padding-bottom: .7rem; margin-bottom: 1.5rem; }
+  h1 { font-size: clamp(1.3rem, 2.6vw, 1.7rem); font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  .status { font-size: .85rem; color: var(--muted); display: flex; align-items: center; gap: .6rem; }
+  .status button { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    font: inherit; font-size: .85rem; padding: .3rem .8rem; border-radius: 6px; cursor: pointer; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
+  .dot.ok { background: var(--down); } .dot.err { background: var(--up); }
+  .dot.busy { background: var(--m6); animation: pulse 1s infinite alternate; }
+  @keyframes pulse { to { opacity: .3; } }
+
+  .block { margin-bottom: 2.5rem; }
+  .block > h2 { font-size: 1.05rem; font-weight: 600; color: var(--muted); margin: 0 0 .8rem; letter-spacing: -0.01em; }
+  .module + .module { margin-top: 2.5rem; }
+
+  .chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 .6rem; border-bottom: 1px solid var(--line); }
+  .chart-title { display: flex; align-items: baseline; gap: .5rem; }
+  .chart-title .toggle { appearance: none; background: none; border: 0; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer;
+    display: flex; align-items: baseline; gap: .5rem; flex: 1; min-width: 0; text-align: left; padding: 0 0 .5rem; }
+  .chart-title .refresh { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: .72rem; font-weight: 500;
+    letter-spacing: 0; padding: .15rem .55rem; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: .3rem; flex: none; align-self: center; margin-bottom: .5rem; }
+  .chart-title .refresh:hover { color: var(--ink); }
+  .chart-title .refresh:focus-visible { outline: 2px solid var(--m3); outline-offset: 1px; }
+  .chart-title .refresh .ic { display: inline-block; }
+  .chart-title .refresh.busy .ic { animation: spin 1s linear infinite; }
+  .chart-title .refresh:disabled { cursor: default; opacity: .7; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .chart-title .toggle:focus-visible { outline: 2px solid var(--m3); outline-offset: 2px; border-radius: 4px; }
+  .chart-title .chev { display: inline-block; width: .9em; color: var(--muted); font-size: .8em; transition: transform .2s; }
+  .chart-title .toggle[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+  .chart-title .peek { display: none; font-size: .8rem; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: auto; }
+  .chart-title .peek .dot { width: 7px; height: 7px; margin-right: .35rem; vertical-align: .05em; background: var(--vc, var(--flat)); }
+  .chart-title .toggle[aria-expanded="false"] .peek { display: inline; }
+  .chart-title .hint { font-size: .75rem; font-weight: 400; color: var(--muted); letter-spacing: 0; opacity: 0; transition: opacity .2s; }
+  .chart-title .toggle:hover .hint, .chart-title .toggle:focus-visible .hint { opacity: 1; }
+  .module.folded .module-body { display: none; }
+  .module.folded .chart-title { margin-bottom: 0; }
+  .module.folded + .module { margin-top: 1rem; }
+  .verdict { margin: 0 0 1.1rem; }
+  .verdict .headline { font-size: clamp(1.25rem, 3vw, 1.75rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; margin: 0 0 .4rem; }
+  .verdict .headline .mark { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: var(--vc, var(--flat)); margin-right: .35em; vertical-align: .08em; }
+  .verdict p { margin: 0; color: var(--muted); font-size: .92rem; }
+
+  .rates { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+  .rate { appearance: none; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+    padding: .7rem .8rem .7rem .85rem; border-left: 3px solid var(--c); transition: opacity .2s; }
+  .rate + .rate { box-shadow: inset 1px 0 0 var(--line); }
+  .rate[aria-pressed="false"] { opacity: .38; }
+  .rate:focus-visible { outline: 2px solid var(--c); outline-offset: -2px; }
+  .rate .name { font-size: .8rem; font-weight: 500; color: var(--muted); }
+  .rate .value { font-size: clamp(1.3rem, 3vw, 1.75rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin: .1rem 0 .25rem; }
+  .rate .value small { font-size: .45em; font-weight: 500; color: var(--muted); margin-left: .1em; }
+  .rate .delta { font-size: .75rem; color: var(--muted); display: flex; flex-direction: column; }
+  .delta .up { color: var(--up); font-weight: 600; } .delta .down { color: var(--down); font-weight: 600; }
+  .rates.multi { gap: 1px; background: var(--line); }
+  .rates.multi .rate { background: var(--bg); box-shadow: none; }
+
+  .ranges { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); margin-bottom: .75rem; }
+  .ranges button { appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-size: .8rem; font-weight: 500;
+    padding: .25rem .7rem; border-radius: 999px; cursor: pointer; }
+  .ranges button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .ranges button:focus-visible, .status button:focus-visible { outline: 2px solid var(--m3); outline-offset: 1px; }
+
+  .chart { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: .75rem .6rem .4rem; height: min(48vh, 360px); position: relative; }
+  .msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 1.5rem; color: var(--muted); }
+  .msg[hidden] { display: none; }
+  .src { font-size: .75rem; color: var(--muted); margin: .6rem 0 0; }
+  .src a { color: inherit; }
+  .src.err { color: var(--up); }
+
+  @media (prefers-reduced-motion: reduce) { .dot.busy, .chart-title .refresh.busy .ic { animation: none; } .rate, .chart-title .chev, .chart-title .hint { transition: none; } }
+  @media (max-width: 760px) { .chart-title .peek { display: none !important; } }
+  @media (max-width: 760px) {
+    .rates, .rates.multi { grid-template-columns: 1fr 1fr; }
+    .rates.multi .rate { box-shadow: none !important; }
+    .rate:nth-child(odd) { box-shadow: none; }
+    .rate:nth-child(n+3) { box-shadow: inset 0 1px 0 var(--line); }
+    .rate:nth-child(even) { box-shadow: inset 1px 0 0 var(--line); }
+    .rate:nth-child(even):nth-child(n+3) { box-shadow: inset 1px 0 0 var(--line), inset 0 1px 0 var(--line); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>Boletim Económico</h1>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">A carregar…</span><button id="refresh">Atualizar tudo</button></div>
+  </div>
+
+  <section class="block" aria-labelledby="b-eco">
+    <h2 id="b-eco">Económico</h2>
+    <div id="modules"></div>
+  </section>
+
+  <section class="block" aria-labelledby="b-hab">
+    <h2 id="b-hab">Habitação</h2>
+    <div id="modules-hab"></div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const ECB = "https://data-api.ecb.europa.eu/service/data/";
+const MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const MESES_LONGOS = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+
+/* ---------- utilitários ---------- */
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (n, d = 2) => n == null ? "—" : n.toLocaleString("pt-PT", { minimumFractionDigits: d, maximumFractionDigits: d, useGrouping: "always" });
+const sign = x => x > 0 ? "+" : x < 0 ? "−" : "";
+const monthLabel = m => { const [y, mo] = m.split("-"); return MESES[+mo - 1] + " " + y; };
+const monthLong = m => { const [y, mo] = m.split("-"); return MESES_LONGOS[+mo - 1] + " de " + y; };
+const qLabel = q => { const [y, t] = q.split("-Q"); return t + "T " + y; };
+const qLong = q => { const [y, t] = q.split("-Q"); return t + ".º trimestre de " + y; };
+const dayLabel = d => { const [y, mo, da] = d.split("-"); return (+da) + " " + MESES[+mo - 1] + " " + y; };
+const timeLabel = t => new Date(t).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" });
+const lastIdx = arr => { let i = arr.length - 1; while (i >= 0 && arr[i] == null) i--; return i; };
+const prevQ = (q, n = 1) => { let [y, t] = q.split("-Q").map(Number); t -= n; while (t < 1) { t += 4; y--; } return y + "-Q" + t; };
+
+// variação com cor: goodWhenUp = true → subir fica verde
+function deltaHTML(a, b, label, d, goodWhenUp = false, unit = "") {
+  if (a == null || b == null) return "";
+  const x = a - b;
+  const good = goodWhenUp ? x > 0.0005 : x < -0.0005, bad = goodWhenUp ? x < -0.0005 : x > 0.0005;
+  return `<span><span class="${good ? "down" : bad ? "up" : ""}">${sign(x)}${fmt(Math.abs(x), d)}${unit}</span> ${label}</span>`;
+}
+
+/* ---------- leitura de dados do BCE ---------- */
+function splitCSV(l) {
+  const out = []; let cur = "", q = false;
+  for (const ch of l) { if (ch === '"') q = !q; else if (ch === "," && !q) { out.push(cur); cur = ""; } else cur += ch; }
+  out.push(cur); return out;
+}
+async function getCSV(url) {
+  let res;
+  try { res = await fetch(url, { cache: "no-store" }); }
+  catch (e) { throw new Error("o BCE não respondeu"); }
+  if (!res.ok) throw new Error("o BCE devolveu o erro " + res.status);
+  const lines = (await res.text()).trim().split(/\r?\n/);
+  const h = splitCSV(lines.shift());
+  const iK = h.indexOf("KEY"), iT = h.indexOf("TIME_PERIOD"), iV = h.indexOf("OBS_VALUE");
+  if (iK < 0 || iT < 0 || iV < 0) throw new Error("o BCE devolveu dados num formato inesperado");
+  const rows = lines.map(l => { const r = splitCSV(l); const v = parseFloat(r[iV]); return { key: r[iK], t: r[iT], v: isNaN(v) ? null : v }; });
+  if (!rows.length) throw new Error("o BCE não devolveu valores");
+  return rows;
+}
+function monthsBetween(from, to) {
+  const out = []; let [y, m] = from.split("-").map(Number);
+  for (;;) { const k = y + "-" + String(m).padStart(2, "0"); out.push(k); if (k >= to) return out; m++; if (m > 12) { m = 1; y++; } }
+}
+const thisMonth = () => { const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0"); };
+
+/* =====================================================================
+   MÓDULO 1 — Inflação vs salários (Portugal)
+   ===================================================================== */
+const INFWAGE = {
+  key: "infwage",
+  title: "Inflação vs salários",
+  defaultYears: 5, perYear: 4,
+  source: `Inflação: variação anual do índice harmonizado de preços no consumidor em Portugal (INE), mês a mês. Para o poder de compra usa-se a média de cada trimestre.
+    Salários: variação anual da remuneração média por trabalhador em Portugal (contas nacionais do INE), que inclui o salário e as contribuições do empregador.
+    Poder de compra: diferença entre as duas. Os salários são publicados cerca de 3 meses depois do fim de cada trimestre.
+    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/ICP" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "INF",  label: "Inflação",        short: "Inflação",       color: "--inf", type: "line" },
+    { id: "WAG",  label: "Salários",        short: "Salários",       color: "--wag", type: "line" },
+    { id: "REAL", label: "Poder de compra", short: "Poder de compra", color: "--real", type: "bar" },
+  ],
+  async load(prev) {
+    const [hicp, lci] = await Promise.allSettled([
+      getCSV(ECB + "HICP/M.PT.N.000000.4D0.ANR?format=csvdata&startPeriod=2000-01"),
+      getCSV(ECB + "MNA/Q..PT.W2.S1.S1._Z.COM_PS._Z.._Z.IX.V.N?format=csvdata&startPeriod=2000-Q1"),
+    ]);
+    if (hicp.status === "rejected" && lci.status === "rejected") throw new Error(hicp.reason.message);
+    const errors = [];
+
+    // inflação mensal e média trimestral (só trimestres completos)
+    let monthly = prev?.monthly || {};
+    if (hicp.status === "fulfilled") { monthly = {}; for (const r of hicp.value) if (r.v != null) monthly[r.t] = r.v; }
+    else errors.push("inflação: " + hicp.reason.message);
+    const byQ = {};
+    for (const m in monthly) { const [y, mo] = m.split("-").map(Number); const q = y + "-Q" + Math.ceil(mo / 3); (byQ[q] ||= []).push(monthly[m]); }
+    const infQ = {};
+    for (const q in byQ) if (byQ[q].length === 3) infQ[q] = byQ[q].reduce((a, b) => a + b, 0) / 3;
+
+    // salários: remuneração por trabalhador (contas nacionais); total da economia, com ajustamento sazonal de preferência
+    let wagQ = prev?.wagQ || {};
+    if (lci.status === "fulfilled") {
+      const series = {};
+      for (const r of lci.value) {
+        if (r.v == null) continue;
+        const p = r.key.split("."), adj = p[2], act = p[10];
+        (series[adj + "|" + act] ||= {})[r.t] = r.v;
+      }
+      const prefAdj = ["Y", "S", "N", "W"], prefAct = ["_T", "BTN", "BTE"];
+      let pick = null;
+      for (const a of prefAct) { for (const j of prefAdj) if (series[j + "|" + a]) { pick = series[j + "|" + a]; break; } if (pick) break; }
+      if (!pick) pick = Object.values(series)[0];
+      if (!pick) errors.push("salários: o BCE não tem valores para Portugal");
+      else { wagQ = {}; for (const q in pick) { const b = pick[prevQ(q, 4)]; if (b) wagQ[q] = (pick[q] / b - 1) * 100; } }
+    } else errors.push("salários: " + lci.reason.message);
+
+    const quarters = [...new Set([...Object.keys(infQ), ...Object.keys(wagQ)])].sort();
+    const values = {
+      INF: quarters.map(q => infQ[q] ?? null),
+      WAG: quarters.map(q => wagQ[q] ?? null),
+    };
+    values.REAL = quarters.map((q, i) => values.INF[i] != null && values.WAG[i] != null ? values.WAG[i] - values.INF[i] : null);
+    return { periods: quarters, values, monthly, wagQ, errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const r = d.values.REAL, i = lastIdx(r);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const real = r[i], w = d.values.WAG[i], inf = d.values.INF[i];
+    let text, color;
+    if (real >= 0.3) { text = "O poder de compra está a aumentar"; color = "var(--down)"; }
+    else if (real <= -0.3) { text = "O poder de compra está a diminuir"; color = "var(--up)"; }
+    else { text = "O poder de compra está estável"; color = "var(--flat)"; }
+
+    const verbW = w >= 0 ? "subiram" : "desceram", verbP = inf >= 0 ? "subiram" : "desceram";
+    let msg = `No ${qLong(d.periods[i])}, os salários ${verbW} ${fmt(Math.abs(w), 1)}% face ao mesmo trimestre do ano anterior e os preços ${verbP} ${fmt(Math.abs(inf), 1)}%.`;
+    if (Math.abs(real) >= 0.05) {
+      let streak = 1;
+      for (let k = i - 1; k >= 0 && r[k] != null && Math.sign(r[k]) === Math.sign(real); k--) streak++;
+      msg += ` Os salários ${real > 0 ? "ganharam" : "perderam"} ${fmt(Math.abs(real), 1)} pontos à inflação` +
+             (streak >= 2 ? `, pelo ${streak}.º trimestre seguido.` : ".");
+    } else msg += " Salários e preços subiram praticamente ao mesmo ritmo.";
+
+    const months = Object.keys(d.monthly).sort(), lm = months[months.length - 1];
+    if (lm) {
+      const x = d.monthly[lm];
+      msg += ` A inflação mais recente, de ${monthLong(lm)}, está em ${fmt(x, 1)}%`;
+      msg += x > inf + 0.2 ? ", acima da média desse trimestre: pressiona o poder de compra nos próximos meses."
+           : x < inf - 0.2 ? ", abaixo da média desse trimestre: ajuda o poder de compra nos próximos meses."
+           : ", perto da média desse trimestre.";
+    }
+    return { text, color, msg };
+  },
+  rates(d) {
+    const months = Object.keys(d.monthly).sort(), lm = months[months.length - 1];
+    const infNow = lm ? d.monthly[lm] : null;
+    const infPrevM = months.length > 1 ? d.monthly[months[months.length - 2]] : null;
+    const infYear = lm ? d.monthly[(+lm.slice(0, 4) - 1) + lm.slice(4)] : null;
+    const w = d.values.WAG, iw = lastIdx(w), r = d.values.REAL, ir = lastIdx(r);
+    return [
+      { id: "INF", name: "Inflação" + (lm ? " · " + monthLabel(lm) : ""), value: infNow, d: 1, unit: "%",
+        deltas: deltaHTML(infNow, infPrevM, "vs mês anterior", 1, false, " p.p.") + deltaHTML(infNow, infYear, "vs há um ano", 1, false, " p.p.") },
+      { id: "WAG", name: "Salários" + (iw >= 0 ? " · " + qLabel(d.periods[iw]) : ""), value: iw >= 0 ? w[iw] : null, d: 1, unit: "%",
+        deltas: (iw >= 0 ? `<span>subida face a um ano antes</span>` : "") + deltaHTML(w[iw], w[iw - 1], "vs trimestre anterior", 1, true, " p.p.") },
+      { id: "REAL", name: "Poder de compra" + (ir >= 0 ? " · " + qLabel(d.periods[ir]) : ""), value: ir >= 0 ? r[ir] : null, d: 1, unit: " p.p.", signed: true,
+        deltas: (ir >= 0 ? `<span>salários menos inflação</span>` : "") + deltaHTML(r[ir], r[ir - 1], "vs trimestre anterior", 1, true, " p.p.") },
+    ];
+  },
+  // gráfico mês a mês: inflação mensal; salários e poder de compra no último mês de cada trimestre
+  chartPerYear: 12,
+  chartLabel: monthLabel,
+  chartData(d) {
+    const qEnd = q => { const [y, t] = q.split("-Q"); return y + "-" + String(t * 3).padStart(2, "0"); };
+    const keys = [...Object.keys(d.monthly), ...d.periods.map(qEnd)].sort();
+    if (!keys.length) return { periods: [], values: { INF: [], WAG: [], REAL: [] } };
+    const periods = monthsBetween(keys[0], keys[keys.length - 1]);
+    const at = {}; d.periods.forEach((q, i) => at[qEnd(q)] = i);
+    return {
+      periods,
+      values: {
+        INF: periods.map(m => d.monthly[m] ?? null),
+        WAG: periods.map(m => at[m] != null ? d.values.WAG[at[m]] : null),
+        REAL: periods.map(m => at[m] != null ? d.values.REAL[at[m]] : null),
+      },
+    };
+  },
+  datasets(d, start, end, visible) {
+    const up = css("--real-up"), down = css("--real-down");
+    return this.series.map(s => {
+      const data = d.values[s.id].slice(start, end);
+      const base = { label: s.label, data, hidden: !visible[s.id] };
+      if (s.type === "bar") return { ...base, type: "bar", backgroundColor: data.map(v => v >= 0 ? up : down), borderWidth: 0, borderRadius: 2,
+                                      barPercentage: 1, categoryPercentage: 1, maxBarThickness: 16, minBarLength: 2, order: 2 };
+      const quarterly = s.id === "WAG";
+      return { ...base, type: "line", borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: quarterly ? 2 : 2.25,
+               pointRadius: quarterly ? 2.5 : 0, pointHoverRadius: 4, tension: quarterly ? 0.2 : 0.15, spanGaps: true, order: 1 };
+    });
+  },
+  label: qLabel,
+  tooltip: (s, v) => s.id === "INF" ? ` Inflação (mês): ${fmt(v, 1)}%`
+                     : s.id === "WAG" ? ` Salários (trimestre): ${fmt(v, 1)}%`
+                     : ` Poder de compra (trimestre): ${sign(v)}${fmt(Math.abs(v), 1)} p.p.`,
+  yTick: v => fmt(v, 0) + "%",
+};
+
+/* =====================================================================
+   MÓDULO 2 — BCE vs Euribor
+   ===================================================================== */
+const BCEEUR = {
+  key: "bceeur",
+  title: "BCE vs Euribor",
+  defaultYears: 3, perYear: 12,
+  source: `Taxa BCE: taxa da facilidade de depósito, a referência principal da política do BCE, em vigor no fim de cada mês.
+    Euribor: média mensal, publicada no primeiro dia útil do mês seguinte.
+    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/FM" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "BCE", label: "Taxa BCE",         short: "BCE", color: "--bce", stepped: true },
+    { id: "E3",  label: "Euribor 3 meses",  short: "3M",  color: "--m3",  code: "EURIBOR3MD_" },
+    { id: "E6",  label: "Euribor 6 meses",  short: "6M",  color: "--m6",  code: "EURIBOR6MD_" },
+    { id: "E12", label: "Euribor 12 meses", short: "12M", color: "--m12", code: "EURIBOR1YD_" },
+  ],
+  async load(prev) {
+    const [eur, bce] = await Promise.allSettled([
+      getCSV(ECB + "FM/M.U2.EUR.RT.MM.EURIBOR3MD_+EURIBOR6MD_+EURIBOR1YD_.HSTA?format=csvdata&startPeriod=1999-01"),
+      getCSV(ECB + "FM/D.U2.EUR.4F.KR.DFR.LEV?format=csvdata&startPeriod=1999-01-01"),
+    ]);
+    if (eur.status === "rejected" && bce.status === "rejected") throw new Error(eur.reason.message);
+    const months = monthsBetween("1999-01", thisMonth());
+    const values = {}, errors = [];
+    let lastChange = null;
+    const align = arr => { const out = months.map(() => null); if (arr && prev) prev.periods.forEach((m, k) => { const j = months.indexOf(m); if (j >= 0) out[j] = arr[k]; }); return out; };
+
+    if (eur.status === "fulfilled") {
+      for (const s of this.series.filter(s => s.code)) {
+        const by = {};
+        for (const r of eur.value) if (r.key.includes("." + s.code + ".") && r.v != null) by[r.t] = r.v;
+        values[s.id] = months.map(m => by[m] ?? null);
+      }
+    } else {
+      errors.push("Euribor: " + eur.reason.message);
+      for (const s of this.series.filter(s => s.code)) values[s.id] = align(prev?.values?.[s.id]);
+    }
+    if (bce.status === "fulfilled") {
+      const obs = bce.value.filter(r => r.v != null).sort((a, b) => a.t < b.t ? -1 : 1);
+      let j = -1;
+      values.BCE = months.map(m => { while (j + 1 < obs.length && obs[j + 1].t <= m + "-31") j++; return j >= 0 ? obs[j].v : null; });
+      for (let i = obs.length - 1; i > 0; i--) {
+        if (Math.abs(obs[i].v - obs[i - 1].v) > 1e-9) { lastChange = { date: obs[i].t, diff: obs[i].v - obs[i - 1].v }; break; }
+      }
+    } else {
+      errors.push("taxa BCE: " + bce.reason.message);
+      values.BCE = align(prev?.values?.BCE);
+      lastChange = prev?.lastChange ?? null;
+    }
+    return { periods: months, values, lastChange, errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const e = d.values.E12, i = lastIdx(e);
+    if (i < 3) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const d3 = e[i] - e[i - 3];
+    let text, color;
+    if (d3 <= -0.10) { text = "O dinheiro está a ficar mais barato"; color = "var(--down)"; }
+    else if (d3 >= 0.10) { text = "O dinheiro está a ficar mais caro"; color = "var(--up)"; }
+    else { text = "O custo do dinheiro está estável"; color = "var(--flat)"; }
+    const verbo = d3 > 0.005 ? "subiu" : d3 < -0.005 ? "desceu" : "manteve-se";
+    let msg = `A Euribor a 12 meses ${verbo}` + (verbo === "manteve-se" ? "" : ` ${fmt(Math.abs(d3), 2)} pontos`) +
+              ` nos últimos três meses, até ${fmt(e[i], 3)}% em ${monthLabel(d.periods[i])}.`;
+    const c = d.lastChange;
+    if (c) msg += ` A última decisão do BCE, a ${dayLabel(c.date)}, foi ${c.diff < 0 ? "descer" : "subir"} a taxa ${fmt(Math.abs(c.diff), 2)} pontos.`;
+    const b = d.values.BCE, ib = lastIdx(b);
+    if (ib >= 0) {
+      const gap = e[i] - b[ib], g = fmt(Math.abs(gap), 2);
+      msg += gap > 0.40  ? ` A Euribor está ${g} pontos acima da taxa do BCE: o mercado espera novas subidas.`
+           : gap > 0.10  ? ` A Euribor está ${g} pontos acima da taxa do BCE: o mercado não espera descidas e admite mais uma subida.`
+           : gap < -0.40 ? ` A Euribor está ${g} pontos abaixo da taxa do BCE: o mercado espera descidas.`
+           : gap < -0.10 ? ` A Euribor está ${g} pontos abaixo da taxa do BCE: o mercado admite uma descida.`
+           : " A Euribor está alinhada com a taxa do BCE: o mercado não espera mudanças para já.";
+    }
+    return { text, color, msg };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const v = d.values[s.id], i = lastIdx(v);
+      let deltas;
+      if (s.id === "BCE") {
+        const c = d.lastChange;
+        deltas = (c ? deltaHTML(c.diff, 0, "em " + dayLabel(c.date), 2) : "") + deltaHTML(v[i], v[i - 12], "vs há um ano", 2);
+      } else deltas = deltaHTML(v[i], v[i - 1], "vs mês anterior", 3) + deltaHTML(v[i], v[i - 12], "vs há um ano", 3);
+      return { id: s.id, name: s.label + (s.id === "BCE" || i < 0 ? "" : " · " + monthLabel(d.periods[i])),
+               value: i >= 0 ? v[i] : null, d: s.id === "BCE" ? 2 : 3, unit: "%", deltas };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({
+      type: "line", label: s.label, data: d.values[s.id].slice(start, end),
+      borderColor: css(s.color), backgroundColor: css(s.color),
+      borderWidth: s.stepped ? 2.75 : 2, pointRadius: 0, pointHoverRadius: 4,
+      stepped: s.stepped ? "after" : false, tension: s.stepped ? 0 : 0.25,
+      spanGaps: true, hidden: !visible[s.id], order: s.stepped ? 0 : 1,
+    }));
+  },
+  label: monthLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 3)}%`,
+  yTick: v => fmt(v, v % 1 === 0 ? 0 : 1) + "%",
+};
+
+/* =====================================================================
+   MÓDULO 3 — PIB e desemprego (Portugal)
+   ===================================================================== */
+const GDPUNE = {
+  key: "gdpune",
+  title: "PIB e desemprego",
+  defaultYears: 5, perYear: 4,
+  source: `PIB: crescimento real (sem efeito dos preços) face ao mesmo trimestre do ano anterior, contas nacionais trimestrais do INE. Sai cerca de 2 meses depois do fim de cada trimestre.
+    Desemprego: taxa de desemprego mensal em Portugal, pessoas dos 15 aos 74 anos, com ajustamento sazonal (INE/Eurostat).
+    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/MNA" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "GDP", label: "PIB",        short: "PIB",        color: "--gdp", type: "bar" },
+    { id: "UNE", label: "Desemprego", short: "Desemprego", color: "--une", type: "line" },
+  ],
+  async load(prev) {
+    const [gdp, une] = await Promise.allSettled([
+      getCSV(ECB + "MNA/Q..PT.W2.S1.S1.B.B1GQ._Z._Z._Z..LR.N?format=csvdata&startPeriod=1999-Q1"),
+      getCSV(ECB + "LFSI/M.PT.S.UNEHRT.TOTAL0.15_74.T?format=csvdata&startPeriod=1999-01"),
+    ]);
+    if (gdp.status === "rejected" && une.status === "rejected") throw new Error(gdp.reason.message);
+    const errors = [];
+
+    // PIB: escolher a série mais recente (de preferência com ajustamento sazonal, em euros)
+    let yoy = prev?.yoy || {}, qoq = prev?.qoq || {};
+    if (gdp.status === "fulfilled") {
+      const series = {};
+      for (const r of gdp.value) {
+        if (r.v == null) continue;
+        const p = r.key.split("."), id = p[2] + "|" + p[12];
+        (series[id] ||= {})[r.t] = r.v;
+      }
+      const rank = id => { const [adj, unit] = id.split("|"); return (["Y", "S", "N", "W"].indexOf(adj) + 1 || 9) * 10 + (["EUR", "XDC"].indexOf(unit) + 1 || 9); };
+      const last = id => Object.keys(series[id]).sort().pop();
+      const ids = Object.keys(series).sort((a, b) => last(b).localeCompare(last(a)) || rank(a) - rank(b));
+      if (!ids.length) errors.push("PIB: o BCE não tem valores para Portugal");
+      else {
+        const pick = series[ids[0]], sa = ["Y", "S"].includes(ids[0].split("|")[0]);
+        yoy = {}; qoq = {};
+        for (const q in pick) {
+          const a = pick[prevQ(q, 4)], b = pick[prevQ(q, 1)];
+          if (a) yoy[q] = (pick[q] / a - 1) * 100;
+          if (b && sa) qoq[q] = (pick[q] / b - 1) * 100;
+        }
+      }
+    } else errors.push("PIB: " + gdp.reason.message);
+
+    let monthly = prev?.monthly || {};
+    if (une.status === "fulfilled") { monthly = {}; for (const r of une.value) if (r.v != null) monthly[r.t] = r.v; }
+    else errors.push("desemprego: " + une.reason.message);
+
+    const quarters = Object.keys(yoy).sort();
+    return { periods: quarters, values: { GDP: quarters.map(q => yoy[q]) }, yoy, qoq, monthly, errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const g = d.values.GDP, i = lastIdx(g);
+    const months = Object.keys(d.monthly).sort(), lm = months[months.length - 1];
+    if (i < 0 && !lm) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const u = lm ? d.monthly[lm] : null;
+    const u12 = lm ? d.monthly[(+lm.slice(0, 4) - 1) + lm.slice(4)] : null;
+    const du = u != null && u12 != null ? u - u12 : null;
+    const gy = i >= 0 ? g[i] : null;
+
+    let text, color;
+    if (gy == null) { text = du != null && du >= 0.5 ? "O desemprego está a subir" : "O mercado de trabalho está estável"; color = du != null && du >= 0.5 ? "var(--up)" : "var(--flat)"; }
+    else if (gy < 0) { text = "A economia está a encolher"; color = "var(--up)"; }
+    else if (du != null && du >= 0.5) { text = gy < 1 ? "A economia abranda e o desemprego está a subir" : "A economia cresce, mas o desemprego está a subir"; color = "var(--up)"; }
+    else if (gy >= 1.5) { text = du != null && du <= 0 ? "A economia está a crescer e o mercado de trabalho está forte" : "A economia está a crescer"; color = "var(--down)"; }
+    else if (gy >= 0.5) { text = "A economia cresce a um ritmo moderado"; color = "var(--flat)"; }
+    else { text = "A economia está praticamente parada"; color = "var(--flat)"; }
+
+    let msg = "";
+    if (gy != null) {
+      const q = d.periods[i], qq = d.qoq[q];
+      msg += `No ${qLong(q)}, o PIB ${gy >= 0 ? "cresceu" : "caiu"} ${fmt(Math.abs(gy), 1)}% face ao mesmo trimestre do ano anterior`;
+      msg += qq != null ? ` e ${qq >= 0 ? "cresceu" : "caiu"} ${fmt(Math.abs(qq), 1)}% face ao trimestre anterior.` : ".";
+    }
+    if (u != null) {
+      msg += ` A taxa de desemprego estava em ${fmt(u, 1)}% em ${monthLong(lm)}`;
+      msg += du == null ? "." : Math.abs(du) < 0.05 ? ", igual a há um ano." : `, ${fmt(Math.abs(du), 1)} pontos ${du > 0 ? "acima" : "abaixo"} de há um ano.`;
+      const last10 = months.slice(-120).map(m => d.monthly[m]);
+      if (last10.length >= 60) {
+        const avg = last10.reduce((a, b) => a + b, 0) / last10.length;
+        msg += u < avg - 0.3 ? ` Está abaixo da média dos últimos 10 anos (${fmt(avg, 1)}%).`
+             : u > avg + 0.3 ? ` Está acima da média dos últimos 10 anos (${fmt(avg, 1)}%).`
+             : ` Está perto da média dos últimos 10 anos (${fmt(avg, 1)}%).`;
+      }
+    }
+    return { text, color, msg: msg.trim() };
+  },
+  rates(d) {
+    const g = d.values.GDP, i = lastIdx(g), q = i >= 0 ? d.periods[i] : null, qq = q ? d.qoq[q] : null;
+    const months = Object.keys(d.monthly).sort(), lm = months[months.length - 1];
+    const u = lm ? d.monthly[lm] : null, uPrev = months.length > 1 ? d.monthly[months[months.length - 2]] : null;
+    const u12 = lm ? d.monthly[(+lm.slice(0, 4) - 1) + lm.slice(4)] : null;
+    return [
+      { id: "GDP", name: "PIB" + (q ? " · " + qLabel(q) : ""), value: i >= 0 ? g[i] : null, d: 1, unit: "%", signed: true,
+        deltas: (i >= 0 ? "<span>face a um ano antes</span>" : "") + (qq != null ? deltaHTML(qq, 0, "vs trimestre anterior", 1, true, "%") : "") },
+      { id: "UNE", name: "Desemprego" + (lm ? " · " + monthLabel(lm) : ""), value: u, d: 1, unit: "%",
+        deltas: deltaHTML(u, uPrev, "vs mês anterior", 1, false, " p.p.") + deltaHTML(u, u12, "vs há um ano", 1, false, " p.p.") },
+    ];
+  },
+  chartPerYear: 12,
+  chartLabel: monthLabel,
+  chartData(d) {
+    const qEnd = q => { const [y, t] = q.split("-Q"); return y + "-" + String(t * 3).padStart(2, "0"); };
+    const keys = [...Object.keys(d.monthly), ...d.periods.map(qEnd)].sort();
+    if (!keys.length) return { periods: [], values: { GDP: [], UNE: [] } };
+    const periods = monthsBetween(keys[0], keys[keys.length - 1]);
+    const at = {}; d.periods.forEach((q, i) => at[qEnd(q)] = i);
+    return { periods, values: {
+      GDP: periods.map(m => at[m] != null ? d.values.GDP[at[m]] : null),
+      UNE: periods.map(m => d.monthly[m] ?? null),
+    } };
+  },
+  datasets(d, start, end, visible) {
+    const up = css("--gdp-up"), down = css("--gdp-down");
+    return this.series.map(s => {
+      const data = d.values[s.id].slice(start, end), base = { label: s.label, data, hidden: !visible[s.id] };
+      if (s.type === "bar") return { ...base, type: "bar", backgroundColor: data.map(v => v >= 0 ? up : down), borderWidth: 0, borderRadius: 2,
+                                      barPercentage: 1, categoryPercentage: 1, maxBarThickness: 16, minBarLength: 2, order: 2 };
+      return { ...base, type: "line", borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: 2.25,
+               pointRadius: 0, pointHoverRadius: 4, tension: 0.15, spanGaps: true, order: 1 };
+    });
+  },
+  label: qLabel,
+  tooltip: (s, v) => s.id === "GDP" ? ` PIB (trimestre, face a um ano antes): ${sign(v)}${fmt(Math.abs(v), 1)}%` : ` Desemprego (mês): ${fmt(v, 1)}%`,
+  yTick: v => fmt(v, 0) + "%",
+};
+
+/* =====================================================================
+   BLOCO HABITAÇÃO — Preço das casas (INE)
+   ===================================================================== */
+const INE = "https://www.ine.pt/ine/json_indicador/pindica.jsp";
+// O INE pode não permitir pedidos diretos a partir do browser; nesse caso usa-se um intermediário público.
+const INE_ROUTES = [
+  { name: "INE direto", wrap: u => u, timeout: 40000 },
+  { name: "codetabs", wrap: u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u) },
+  { name: "allorigins", wrap: u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u) },
+  { name: "corsproxy.io", wrap: u => "https://corsproxy.io/?url=" + encodeURIComponent(u) },
+  { name: "cors.eu.org", wrap: u => "https://cors.eu.org/" + u },
+];
+let ineRoute = 0;
+async function fetchTimeout(url, ms) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+  try { return await fetch(url, { cache: "no-store", signal: ctl.signal }); }
+  finally { clearTimeout(t); }
+}
+async function getINE(params) {
+  const url = INE + "?" + new URLSearchParams({ op: "2", lang: "PT", ...params });
+  const tried = [];
+  for (let k = ineRoute; k < INE_ROUTES.length; k++) {
+    const r = INE_ROUTES[k];
+    try {
+      const res = await fetchTimeout(r.wrap(url), r.timeout || 45000);
+      if (!res.ok) { tried.push(r.name + ": erro " + res.status); continue; }
+      const text = await res.text();
+      let j;
+      try { j = JSON.parse(text); } catch (e) { tried.push(r.name + ": resposta não é JSON"); continue; }
+      ineRoute = k;
+      return j;
+    } catch (e) { tried.push(r.name + (e.name === "AbortError" ? ": demorou demasiado" : ": bloqueado ou sem resposta")); }
+  }
+  throw new Error("nenhuma ligação funcionou — " + tried.join("; "));
+}
+function ineQuarter(label) {
+  let m;
+  if ((m = label.match(/(\d)\s*\.?\s*[ºo°]?\s*trimestre\s*(?:de\s*)?(\d{4})/i))) return m[2] + "-Q" + m[1];
+  if ((m = label.match(/(\d{4})\s*[-\s]?T\s*(\d)/i))) return m[1] + "-Q" + m[2];
+  if ((m = label.match(/^S\dA(\d{4})(\d)$/) || label.match(/^(\d{4})(\d)$/))) return m[1] + "-Q" + m[2];
+  return null;
+}
+function ineRecords(j) {
+  const root = Array.isArray(j) ? j[0] : j;
+  if (root && root.Sucesso && root.Sucesso.Falso) {
+    const e = new Error("o INE respondeu com um erro: " + (root.Sucesso.Falso[0]?.Msg || "desconhecido"));
+    e.ineError = true; throw e;
+  }
+  if (!root || !root.Dados) throw new Error("o INE devolveu dados num formato inesperado");
+  const out = [];
+  for (const label in root.Dados) {
+    const q = ineQuarter(label);
+    if (!q) continue;
+    for (const r of root.Dados[label]) {
+      const catT = r.dim_3_t ?? r.dim_3 ?? "Total";
+      if (!(/^total/i.test(catT) || r.dim_3 === "T")) continue;
+      const v = parseFloat(String(r.valor ?? "").replace(/\s/g, "").replace(",", "."));
+      if (!isNaN(v)) out.push({ q, geo: (r.geodsg || "").trim(), cod: r.geocod || "", v });
+    }
+  }
+  return out;
+}
+
+const EM = n => ({ Porto: "no Porto", Maia: "na Maia" })[n] || "em " + n;
+const HOUSE = {
+  key: "house",
+  container: "modules-hab",
+  sourceName: "INE",
+  title: "Preço das casas",
+  defaultYears: 5, perYear: 4, rateCols: 3,
+  get maxAge() { return state[this.key]?.data?.route === "GitHub" ? 6 * 3600e3 : 7 * 24 * 3600e3; },
+  source: `Preço mediano por m² das casas vendidas (alojamentos familiares, novos e usados), calculado com as vendas dos últimos 12 meses.
+    Por isso cada trimestre mostra a tendência do último ano e não oscila muito de trimestre para trimestre. Sai cerca de 3,5 meses depois do fim de cada trimestre.
+    Uma tarefa automática no GitHub copia estes dados do INE todos os dias, para a página carregar depressa.
+    Fonte: <a href="https://www.ine.pt/xurl/indx/0012234/PT" target="_blank" rel="noopener">INE, Estatísticas de Preços da Habitação ao nível local</a>.`,
+  series: [
+    { id: "Portugal",   label: "Portugal",   short: "Portugal",   color: "--pt",   bold: true },
+    { id: "Lisboa",     label: "Lisboa",     short: "Lisboa",     color: "--lis" },
+    { id: "Porto",      label: "Porto",      short: "Porto",      color: "--opo" },
+    { id: "Matosinhos", label: "Matosinhos", short: "Matosinhos", color: "--mat" },
+    { id: "Maia",       label: "Maia",       short: "Maia",       color: "--maia" },
+    { id: "Valongo",    label: "Valongo",    short: "Valongo",    color: "--val" },
+  ],
+  // códigos geográficos do INE (NUTS 2024 e, por segurança, NUTS 2013)
+  geoCodes: {
+    Portugal: ["PT"], Lisboa: ["1A01106", "1701106"], Porto: ["11A1312"],
+    Matosinhos: ["11A1308"], Maia: ["11A1306"], Valongo: ["11A1315"],
+  },
+  // lista de trimestres para pedir ao INE (código S5A + ano + trimestre), do mais antigo ao "último - skip"
+  quarterCodes(skip) {
+    const now = new Date(); let y = now.getFullYear(), t = Math.ceil((now.getMonth() + 1) / 3) - skip;
+    while (t < 1) { t += 4; y--; }
+    const out = [];
+    for (let k = 0; k < 28; k++) { out.unshift("S5A" + y + t); t--; if (t < 1) { t = 4; y--; } }
+    return out;
+  },
+  async loadGeo(s, skip) {
+    let lastErr = null;
+    for (const code of this.geoCodes[s.id] || []) {
+      try {
+        const recs = ineRecords(await getINE({ varcd: "0012234", Dim1: this.quarterCodes(skip).join(","), Dim2: code }))
+          .filter(r => r.cod === code || r.geo.toLowerCase() === s.id.toLowerCase())
+          .map(r => ({ ...r, geo: s.id, cod: code }));
+        if (recs.length) return recs;
+      } catch (e) { lastErr = e; }
+    }
+    if (lastErr) throw lastErr;
+    return [];
+  },
+  // 1.º: ficheiro copiado do INE todos os dias pela tarefa automática do GitHub (rápido)
+  githubUrls() {
+    const urls = [];
+    const h = location.hostname, parts = location.pathname.split("/").filter(Boolean);
+    if (h.endsWith(".github.io")) {
+      const user = h.split(".")[0], repo = parts[0] || h;
+      urls.push(`https://raw.githubusercontent.com/${user}/${repo}/main/dados/casas.json`);
+    }
+    if (location.protocol.startsWith("http")) urls.push(new URL("dados/casas.json", location.href).href);
+    return urls;
+  },
+  async loadGithub() {
+    for (const u of this.githubUrls()) {
+      try {
+        const res = await fetchTimeout(u + "?t=" + Date.now(), 15000);
+        if (!res.ok) continue;
+        const j = await res.json();
+        if (!j.periodos?.length || !j.valores) continue;
+        return { periods: j.periodos, values: Object.fromEntries(this.series.map(s => [s.id, j.valores[s.id] || j.periodos.map(() => null)])),
+                 errors: [], route: "GitHub", sourceUpdated: j.atualizado, fetchedAt: Date.now() };
+      } catch (e) {}
+    }
+    return null;
+  },
+  async load(prev) {
+    const gh = await this.loadGithub();
+    if (gh) return gh;
+    // 2.º: diretamente ao INE (lento e muitas vezes bloqueado; só se não houver ficheiro do GitHub)
+    const st = state[this.key];
+    const slow = setTimeout(() => { if (!st.data) st.els.msg.textContent = "O INE está a demorar a responder. Pode levar até um minuto…"; }, 8000);
+    try { return await this.loadInner(prev); } finally { clearTimeout(slow); }
+  },
+  async loadInner(prev) {
+    // começa pelo trimestre anterior ao atual; se o INE disser que ainda não existe, recua um trimestre
+    let recs = [], lastErr = null;
+    for (const skip of [1, 2, 3]) {
+      const res = await Promise.allSettled(this.series.map(s => this.loadGeo(s, skip)));
+      recs = res.filter(r => r.status === "fulfilled").flatMap(r => r.value);
+      const errs = res.filter(r => r.status === "rejected").map(r => r.reason);
+      lastErr = errs[0] || null;
+      if (recs.length || !errs.some(e => e.ineError)) break;
+    }
+    if (!recs.length) throw lastErr || new Error("o INE não devolveu valores para estas localidades");
+    const errors = [], byGeo = {};
+    for (const s of this.series) {
+      const cand = recs.filter(r => r.geo === s.id);
+      if (!cand.length) { errors.push(s.id + ": sem dados no INE"); continue; }
+      byGeo[s.id] = {};
+      for (const r of cand) byGeo[s.id][r.q] = r.v;
+    }
+    const periods = [...new Set(Object.values(byGeo).flatMap(Object.keys))].sort();
+    const values = {};
+    for (const s of this.series) values[s.id] = periods.map(q => byGeo[s.id]?.[q] ?? prev?.values?.[s.id]?.[prev.periods.indexOf(q)] ?? null);
+    return { periods, values, errors, route: INE_ROUTES[ineRoute].name, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const p = d.values.Portugal, i = lastIdx(p);
+    if (i < 4) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const yoy = (p[i] / p[i - 4] - 1) * 100;
+    let text, color;
+    if (yoy >= 8) { text = "Comprar casa está a ficar muito mais caro"; color = "var(--up)"; }
+    else if (yoy >= 3) { text = "Comprar casa está a ficar mais caro"; color = "var(--up)"; }
+    else if (yoy > -2) { text = "Os preços das casas estão a estabilizar"; color = "var(--flat)"; }
+    else { text = "Comprar casa está a ficar mais barato"; color = "var(--down)"; }
+
+    const q = d.periods[i];
+    let msg = `No ${qLong(q)}, o preço mediano das casas vendidas em Portugal foi de ${fmt(p[i], 0)} €/m², ${yoy >= 0 ? "mais" : "menos"} ${fmt(Math.abs(yoy), 1)}% do que um ano antes.`;
+    const locs = this.series.filter(s => s.id !== "Portugal").map(s => {
+      const v = d.values[s.id], k = lastIdx(v);
+      return k >= 4 && v[k - 4] ? { id: s.id, v: v[k], yoy: (v[k] / v[k - 4] - 1) * 100 } : k >= 0 ? { id: s.id, v: v[k], yoy: null } : null;
+    }).filter(Boolean);
+    if (locs.length) {
+      const hi = locs.reduce((a, b) => b.v > a.v ? b : a), lo = locs.reduce((a, b) => b.v < a.v ? b : a);
+      const art = n => ({ Porto: "O Porto", Maia: "A Maia" })[n] || n;
+      msg += ` ${art(hi.id)} é o concelho mais caro (${fmt(hi.v, 0)} €/m²) e ${lo.id === "Maia" ? "a Maia" : lo.id === "Porto" ? "o Porto" : lo.id} o mais acessível (${fmt(lo.v, 0)} €/m²).`;
+      const withY = locs.filter(l => l.yoy != null);
+      if (withY.length) { const f = withY.reduce((a, b) => b.yoy > a.yoy ? b : a); msg += ` A maior subida num ano foi ${EM(f.id)} (${sign(f.yoy)}${fmt(Math.abs(f.yoy), 1)}%).`; }
+      msg += ` Uma casa de 100 m² custaria cerca de ${fmt(Math.round(hi.v * 100 / 1000) * 1000, 0)} € ${EM(hi.id)} e ${fmt(Math.round(lo.v * 100 / 1000) * 1000, 0)} € ${EM(lo.id)}.`;
+    }
+    return { text, color, msg };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const v = d.values[s.id], i = lastIdx(v);
+      const yoy = i >= 4 && v[i - 4] ? (v[i] / v[i - 4] - 1) * 100 : null, qoq = i >= 1 && v[i - 1] ? (v[i] / v[i - 1] - 1) * 100 : null;
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + qLabel(d.periods[i]) : ""), value: i >= 0 ? v[i] : null, d: 0, unit: " €/m²",
+               deltas: deltaHTML(yoy, 0, "vs há um ano", 1, false, "%") + deltaHTML(qoq, 0, "vs trimestre anterior", 1, false, "%") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({
+      type: "line", label: s.label, data: d.values[s.id].slice(start, end),
+      borderColor: css(s.color), backgroundColor: css(s.color),
+      borderWidth: s.bold ? 3 : 2, borderDash: s.bold ? [6, 3] : [], pointRadius: 0, pointHoverRadius: 4,
+      tension: 0.2, spanGaps: true, hidden: !visible[s.id], order: s.bold ? 0 : 1,
+    }));
+  },
+  label: qLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 0)} €/m²`,
+  yTick: v => fmt(v, 0) + " €",
+};
+
+/* ---------- ordem dos gráficos ---------- */
+const MODULES = [INFWAGE, BCEEUR, GDPUNE, HOUSE];
+
+/* ---------- construção e desenho genéricos ---------- */
+const state = {};
+
+function build() {
+  for (const m of MODULES) {
+    const el = document.createElement("div");
+    el.className = "module";
+    el.innerHTML = `
+      <h3 class="chart-title"><button class="toggle" aria-expanded="true"><span class="chev" aria-hidden="true">▾</span><span>${m.title}</span><span class="hint">fechar</span><span class="peek"></span></button><button class="refresh" title="Atualizar só este gráfico"><span class="ic" aria-hidden="true">↻</span><span class="rl">Atualizar</span></button></h3>
+      <div class="module-body">
+      <div class="verdict"><div class="headline"><span class="mark"></span>A obter dados…</div><p></p></div>
+      <div class="rates${m.rateCols ? " multi" : ""}" style="--cols:${m.rateCols || m.series.length}"></div>
+      <div class="ranges" role="group" aria-label="Período do gráfico ${m.title}">
+        ${[1, 3, 5, 10, 0].map(y => `<button data-y="${y}" aria-pressed="${y === m.defaultYears}">${y ? y + (y === 1 ? " ano" : " anos") : "Tudo"}</button>`).join("")}
+      </div>
+      <div class="chart"><canvas aria-label="Gráfico: ${m.title}"></canvas><div class="msg">A obter dados${m.sourceName ? " do " + m.sourceName : " do Banco Central Europeu"}…</div></div>
+      <p class="src">${m.source}</p>
+      <p class="src err" hidden></p>
+      </div>`;
+    $(m.container || "modules").appendChild(el);
+    const st = state[m.key] = {
+      data: null, years: m.defaultYears, chart: null, visible: {},
+      els: { verdict: el.querySelector(".verdict"), rates: el.querySelector(".rates"), ranges: el.querySelector(".ranges"),
+             canvas: el.querySelector("canvas"), msg: el.querySelector(".msg"), err: el.querySelector(".err") },
+    };
+    m.series.forEach(s => st.visible[s.id] = true);
+    // abrir / fechar (lembra a escolha)
+    const tg = el.querySelector(".toggle"), hint = el.querySelector(".hint");
+    st.els.module = el; st.els.peek = el.querySelector(".peek");
+    const setFold = folded => {
+      el.classList.toggle("folded", folded);
+      tg.setAttribute("aria-expanded", String(!folded));
+      hint.textContent = folded ? "abrir" : "fechar";
+    };
+    setFold(true);   // os gráficos começam sempre fechados
+    tg.addEventListener("click", () => {
+      const f = !el.classList.contains("folded");
+      setFold(f);
+      if (!f) render(m);
+    });
+    // atualizar só este gráfico
+    const rb = el.querySelector(".refresh");
+    st.els.refresh = rb;
+    rb.addEventListener("click", async () => {
+      if (rb.disabled) return;
+      await loadModule(m, true);
+      updateStatus();
+    });
+    st.els.ranges.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      st.years = +b.dataset.y;
+      for (const x of st.els.ranges.children) x.setAttribute("aria-pressed", x === b);
+      render(m);
+    });
+    try { const c = JSON.parse(localStorage.getItem("ind-" + m.key)); if (c && c.periods && c.values) st.data = c; } catch (e) {}
+  }
+}
+
+function render(m) {
+  const st = state[m.key], d = st.data;
+  if (!d) return;
+  try {
+    // comentário
+    const v = m.verdict(d);
+    st.els.verdict.style.setProperty("--vc", v.color);
+    st.els.verdict.querySelector(".headline").innerHTML = '<span class="mark" aria-hidden="true"></span>' + v.text;
+    st.els.verdict.querySelector("p").textContent = v.msg;
+    st.els.peek.style.setProperty("--vc", v.color);
+    st.els.peek.innerHTML = '<span class="dot"></span>' + v.text;
+
+    // valores
+    st.els.rates.innerHTML = "";
+    for (const r of m.rates(d)) {
+      const s = m.series.find(x => x.id === r.id);
+      const b = document.createElement("button");
+      b.className = "rate";
+      b.style.setProperty("--c", `var(${s.color})`);
+      b.setAttribute("aria-pressed", st.visible[r.id]);
+      const val = r.value == null ? "—" : (r.signed ? sign(r.value) + fmt(Math.abs(r.value), r.d) : fmt(r.value, r.d)) + `<small>${r.unit}</small>`;
+      b.innerHTML = `<div class="name">${r.name}</div><div class="value">${val}</div><div class="delta">${r.deltas}</div>`;
+      b.onclick = () => { st.visible[r.id] = !st.visible[r.id]; render(m); };
+      st.els.rates.appendChild(b);
+    }
+
+    // gráfico
+    const cd = m.chartData ? m.chartData(d) : { periods: d.periods, values: d.values };
+    const perYear = m.chartPerYear || m.perYear, labelFn = m.chartLabel || m.label;
+    let nowIdx = -1;
+    for (const id in cd.values) nowIdx = Math.max(nowIdx, lastIdx(cd.values[id]));
+    const end = nowIdx + 1, start = st.years ? Math.max(0, end - st.years * perYear) : 0;
+    const grid = css("--line"), muted = css("--muted"), ink = css("--ink"), surface = css("--surface");
+    st.els.msg.hidden = true;
+    if (st.chart) st.chart.destroy();
+    st.chart = new Chart(st.els.canvas, {
+      type: "line",
+      data: { labels: cd.periods.slice(start, end).map(labelFn), datasets: m.datasets(cd, start, end, st.visible) },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: surface, titleColor: ink, bodyColor: ink, borderColor: grid, borderWidth: 1,
+            padding: 10, boxPadding: 4, usePointStyle: true,
+            callbacks: { label: c => m.tooltip(m.series[c.datasetIndex], c.parsed.y) },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: muted, maxRotation: 0, autoSkipPadding: 24 }, border: { color: grid } },
+          y: { grid: { color: grid }, border: { display: false }, ticks: { color: muted, callback: m.yTick } },
+        },
+      },
+    });
+  } catch (e) {
+    console.error(m.key, e);
+    st.els.msg.hidden = false;
+    st.els.msg.textContent = "Erro ao desenhar este gráfico: " + e.message;
+  }
+}
+const renderAll = () => MODULES.forEach(render);
+
+/* ---------- atualização ---------- */
+let lastLoad = 0;
+async function loadModule(m, force = true) {
+  const st = state[m.key];
+  if (!force && m.maxAge && st.data?.fetchedAt && Date.now() - st.data.fetchedAt < m.maxAge && !st.data.errors?.length) {
+    const rl0 = st.els.refresh?.querySelector(".rl");
+    if (rl0) rl0.textContent = "Atualizar · " + new Date(st.data.fetchedAt).toLocaleString("pt-PT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    render(m); return;
+  }
+  const rb = st.els.refresh, rl = rb && rb.querySelector(".rl");
+  if (rb) { rb.disabled = true; rb.classList.add("busy"); rl.textContent = "A atualizar…"; }
+  try {
+    st.data = await m.load(st.data);
+    try { localStorage.setItem("ind-" + m.key, JSON.stringify(st.data)); } catch (e) {}
+    st.failed = false;
+    st.els.err.hidden = !st.data.errors.length;
+    st.els.err.textContent = st.data.errors.length ? "Não atualizou: " + st.data.errors.join("; ") + ". Essa parte mostra os últimos dados guardados." : "";
+  } catch (e) {
+    st.failed = true;
+    if (st.data) { st.els.err.hidden = false; st.els.err.textContent = "Sem ligação ao " + (m.sourceName || "BCE") + " (" + e.message + "). A mostrar os dados de " + timeLabel(st.data.fetchedAt) + "."; }
+    else {
+      st.els.msg.hidden = false;
+      st.els.msg.textContent = "Não foi possível ligar ao " + (m.sourceName || "Banco Central Europeu") + ": " + e.message + ". Verifica a ligação à internet e carrega em Atualizar.";
+      st.els.verdict.querySelector(".headline").innerHTML = '<span class="mark"></span>Sem dados';
+    }
+  }
+  if (rb) {
+    rb.disabled = false; rb.classList.remove("busy");
+    rl.textContent = "Atualizar";
+    rb.title = st.data?.fetchedAt ? "Atualizado " + timeLabel(st.data.fetchedAt) + " — carrega para atualizar só este gráfico" : "Atualizar só este gráfico";
+    if (m.maxAge && st.data?.fetchedAt) rl.textContent = "Atualizar · " + new Date(st.data.fetchedAt).toLocaleString("pt-PT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+  render(m);
+}
+function updateStatus() {
+  const bad = MODULES.filter(m => state[m.key].failed || state[m.key].data?.errors?.length);
+  const times = MODULES.map(m => state[m.key].data?.fetchedAt).filter(Boolean);
+  if (!times.length) { $("dot").className = "dot err"; $("statusText").textContent = "Sem dados: ver avisos"; return; }
+  if (!bad.length) { $("dot").className = "dot ok"; $("statusText").textContent = "Atualizado " + timeLabel(Math.min(...times)); }
+  else { $("dot").className = "dot err"; $("statusText").textContent = "Atualizado em parte: ver avisos a vermelho"; }
+}
+async function loadAll(force = false) {
+  lastLoad = Date.now();
+  $("dot").className = "dot busy";
+  $("statusText").textContent = "A atualizar…";
+  await Promise.all(MODULES.map(m => loadModule(m, force)));
+  updateStatus();
+}
+
+$("refresh").onclick = () => loadAll(true);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && Date.now() - lastLoad > 3600e3) loadAll();
+});
+setInterval(loadAll, 6 * 3600e3);
+
+build();
+renderAll();
+loadAll();
+</script>
+</body>
+</html>
