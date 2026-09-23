@@ -4,6 +4,9 @@ Vai buscar ao INE, para Portugal e 5 concelhos:
   - o preço mediano por m² das casas vendidas (indicador 0012234, últimos 12 meses, trimestral) -> dados/casas.json
   - a renda mediana por m² dos novos contratos de arrendamento (últimos 12 meses, trimestral;
     se não for possível, a versão anual 0014711) -> dados/rendas.json
+  - fogos licenciados e concluídos em construções novas para habitação (Portugal) -> dados/construcao.json
+  - número de casas vendidas (Portugal) -> dados/transacoes.json
+  - imigrantes e emigrantes por ano (Eurostat) -> dados/migracao.json
 Corre todos os dias no GitHub (ver .github/workflows).
 
 Só usa a biblioteca padrão do Python: não é preciso instalar nada.
@@ -339,11 +342,269 @@ def atualizar_rendas(hoje: datetime) -> bool:
     return gravar(RENDAS, por_local, extra, hoje)
 
 
+# ================================================================ séries nacionais (oferta e procura)
+MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+
+def periodo(rotulo: str, codigo: str):
+    """Converte o rótulo (ou o código) de um período do INE em 'AAAA-Qn', 'AAAA-MM' ou 'AAAA'."""
+    q = trimestre(rotulo)
+    if q:
+        return q
+    r = rotulo.lower()
+    for i, m in enumerate(MESES_PT):
+        mm = re.search(m + r"\s*(?:de\s*)?(\d{4})", r)
+        if mm:
+            return f"{mm.group(1)}-{i + 1:02d}"
+    m = re.match(r"^S\dA(\d{4})(\d{2})$", codigo)
+    if m and 1 <= int(m.group(2)) <= 12:
+        return f"{m.group(1)}-{m.group(2)}"
+    q = quarter_de_codigo(codigo)
+    if q:
+        return q
+    m = re.search(r"(\d{4})", rotulo) or re.search(r"(\d{4})", codigo)
+    return m.group(1) if m else None
+
+
+def codigos_periodo_ficha(indicador: str) -> list:
+    try:
+        texto = ficha(indicador)
+    except Exception as e:
+        print(f"{indicador}: ficha indisponível ({e})", file=sys.stderr)
+        return []
+    return sorted(set(re.findall(r"S\dA\d{4}(?:\d{1,2})?(?!\d)", texto)), reverse=True)
+
+
+def descobrir_codigos(indicador: str, hoje: datetime) -> list:
+    """Sem ficha: experimenta formatos trimestrais e mensais num período já publicado."""
+    prefixos = ["S3A", "S5A", "S4A", "S6A", "S2A", "S1A", "S7A"]
+    y, m = hoje.year, hoje.month
+    for recuo in (4, 6):  # meses atrás
+        yy, mm = y, m - recuo
+        while mm < 1:
+            mm += 12
+            yy -= 1
+        tt = (mm - 1) // 3 + 1
+        for p in prefixos:
+            for fmt_, gera in (("mensal", lambda yy, k: f"{p}{yy}{k:02d}"), ("trimestral", lambda yy, k: f"{p}{yy}{k}")):
+                k = mm if fmt_ == "mensal" else tt
+                cod = gera(yy, k)
+                try:
+                    dados = pedir({"varcd": indicador, "Dim1": cod, "Dim2": "PT"}, tentativas=1)
+                    if tem_dados(dados):
+                        print(f"{indicador}: formato {fmt_} aceite ({cod})")
+                        out, a, b = [], y, (m if fmt_ == "mensal" else (m - 1) // 3 + 1)
+                        for _ in range(120 if fmt_ == "mensal" else 44):
+                            out.append(gera(a, b))
+                            b -= 1
+                            if b < 1:
+                                b, a = (12 if fmt_ == "mensal" else 4), a - 1
+                        return out
+                except Exception:
+                    pass
+    return []
+
+
+def serie_nacional(indicador: str, hoje: datetime, aceitar=categoria_total, maximo: int = 120) -> dict:
+    """Valores de Portugal (PT) por período, pedidos um período de cada vez."""
+    codigos = codigos_periodo_ficha(indicador)[:maximo] or descobrir_codigos(indicador, hoje)
+    if not codigos:
+        raise RuntimeError(f"{indicador}: não foi possível descobrir os códigos dos períodos")
+    out, falhas, obtidos = {}, 0, 0
+    for c in codigos:
+        try:
+            dados = pedir({"varcd": indicador, "Dim1": c, "Dim2": "PT"})
+        except ErroINE:
+            falhas += 1
+            if obtidos and falhas >= 3:
+                break
+            continue
+        falhas = 0
+        raiz = dados[0] if isinstance(dados, list) else dados
+        for rotulo, linhas in (raiz.get("Dados") or {}).items():
+            per = periodo(rotulo, c)
+            for l in linhas:
+                if l.get("geocod") not in ("PT", None) or not aceitar(l):
+                    continue
+                try:
+                    out[per] = float(str(l.get("valor", "")).replace(" ", "").replace(",", "."))
+                    obtidos += 1
+                except ValueError:
+                    pass
+        time.sleep(0.3)
+    print(f"{indicador}: {len(out)} períodos")
+    return out
+
+
+def para_trimestres(serie: dict) -> dict:
+    """Soma meses em trimestres completos; se já for trimestral, devolve igual."""
+    if not serie or all("-Q" in k for k in serie):
+        return serie
+    soma, conta = {}, {}
+    for k, v in serie.items():
+        m = re.match(r"^(\d{4})-(\d{2})$", k)
+        if not m:
+            continue
+        q = f"{m.group(1)}-Q{(int(m.group(2)) - 1) // 3 + 1}"
+        soma[q] = soma.get(q, 0) + v
+        conta[q] = conta.get(q, 0) + 1
+    return {q: v for q, v in soma.items() if conta[q] == 3}
+
+
+def procurar_indicador(nome_curto: str, teste, intervalos, guardado=None):
+    candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for a, b in intervalos for c in range(a, b)]
+    vistos, erros = set(), 0
+    for c in candidatos:
+        if c in vistos:
+            continue
+        vistos.add(c)
+        try:
+            nome = nome_indicador(ficha(c, timeout=30))
+            erros = 0
+        except Exception:
+            erros += 1
+            if erros >= 5:
+                break
+            continue
+        if nome and teste(nome.lower()):
+            print(f"{nome_curto}: indicador encontrado, {c}: {nome}")
+            return c
+        time.sleep(0.2)
+    print(f"{nome_curto}: indicador não encontrado.", file=sys.stderr)
+    return None
+
+
+def ler(ficheiro: str) -> dict:
+    if os.path.exists(ficheiro):
+        with open(ficheiro, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def gravar_simples(ficheiro: str, series: dict, extra: dict, hoje: datetime) -> bool:
+    antigo = ler(ficheiro)
+    ant = {n: dict(zip(antigo.get("periodos", []), v)) for n, v in (antigo.get("valores") or {}).items()}
+    for n in list(series):
+        if not series[n] and ant.get(n):
+            series[n] = {k: v for k, v in ant[n].items() if v is not None}
+    if not any(series.values()):
+        return False
+    periodos = sorted({k for s_ in series.values() for k in s_})
+    novo = {**extra, "periodos": periodos, "valores": {n: [series[n].get(p) for p in periodos] for n in series}}
+    chaves = [k for k in novo if k != "atualizado"]
+    if {k: antigo.get(k) for k in chaves} == {k: novo[k] for k in chaves}:
+        print(f"{os.path.basename(ficheiro)}: sem alterações.")
+        return True
+    novo["atualizado"] = hoje.strftime("%Y-%m-%dT%H:%M:%SZ")
+    os.makedirs(os.path.dirname(ficheiro), exist_ok=True)
+    with open(ficheiro, "w", encoding="utf-8") as f:
+        json.dump(novo, f, ensure_ascii=False, indent=1)
+    print(f"{os.path.basename(ficheiro)}: gravado, {len(periodos)} períodos, último {periodos[-1]}.")
+    return True
+
+
+CONSTRUCAO = os.path.join(PASTA, "construcao.json")
+TRANSACOES = os.path.join(PASTA, "transacoes.json")
+MIGRACAO = os.path.join(PASTA, "migracao.json")
+
+
+def e_licenciados(n):
+    return "fogos licenciados" in n and "construções novas" in n and "habitação familiar" in n and "nuts - 2024" in n \
+        and ("trimestral" in n or "mensal" in n) and "pavimento" not in n and "entidade" not in n
+
+
+def e_concluidos(n):
+    return "fogos concluídos" in n and "construções novas" in n and "habitação familiar" in n and "nuts - 2024" in n \
+        and "trimestral" in n and "pavimento" not in n and "entidade" not in n and "tipologia" not in n
+
+
+def e_vendas(n):
+    return "vendas de alojamentos familiares" in n and "n.º" in n and "trimestral" in n and "nuts - 2024" in n \
+        and "12 meses" not in n and "domicílio" not in n and "setor" not in n and "quartis" not in n
+
+
+def atualizar_construcao(hoje: datetime) -> bool:
+    antigo = ler(CONSTRUCAO)
+    cod_l = procurar_indicador("Fogos licenciados", e_licenciados, [(12090, 12110), (12760, 12800), (12060, 12090)], antigo.get("indicador_licenciados"))
+    cod_c = procurar_indicador("Fogos concluídos", e_concluidos, [(12770, 12790), (12790, 12810)], antigo.get("indicador_concluidos") or "0012778")
+    series = {"licenciados": {}, "concluidos": {}}
+    for nome, cod in (("licenciados", cod_l), ("concluidos", cod_c)):
+        if not cod:
+            continue
+        try:
+            series[nome] = para_trimestres(serie_nacional(cod, hoje))
+        except Exception as e:
+            print(f"{nome}: falhou ({e})", file=sys.stderr)
+    return gravar_simples(CONSTRUCAO, series, {"fonte": "INE, Estatísticas da construção (fogos em construções novas para habitação familiar)",
+                                               "indicador_licenciados": cod_l, "indicador_concluidos": cod_c, "frequencia": "trimestral"}, hoje)
+
+
+def atualizar_transacoes(hoje: datetime) -> bool:
+    antigo = ler(TRANSACOES)
+    cod = procurar_indicador("Vendas de casas", e_vendas, [(12225, 12260), (12200, 12225), (12260, 12300)], antigo.get("indicador"))
+    series = {"vendas": {}}
+    if cod:
+        try:
+            series["vendas"] = para_trimestres(serie_nacional(cod, hoje))
+        except Exception as e:
+            print(f"vendas: falhou ({e})", file=sys.stderr)
+    return gravar_simples(TRANSACOES, series, {"fonte": "INE, Estatísticas de preços da habitação (n.º de alojamentos familiares vendidos)",
+                                               "indicador": cod, "frequencia": "trimestral"}, hoje)
+
+
+EUROSTAT = os.environ.get("EUROSTAT_URL", "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/")
+
+
+def eurostat(dataset: str, filtros: dict, preferir: dict) -> dict:
+    url = EUROSTAT + dataset + "?" + urllib.parse.urlencode({"format": "JSON", "lang": "EN", **filtros})
+    req = urllib.request.Request(url, headers=CABECALHOS)
+    with urllib.request.urlopen(req, timeout=120) as r:
+        j = json.loads(r.read().decode("utf-8"))
+    ids, size = j["id"], j["size"]
+    stride, acc = [0] * len(ids), 1
+    for k in range(len(ids) - 1, -1, -1):
+        stride[k], acc = acc, acc * size[k]
+    base = 0
+    for k, dim in enumerate(ids):
+        if dim == "time":
+            continue
+        idx = j["dimension"][dim]["category"]["index"]
+        cod = next((c for c in preferir.get(dim, []) if c in idx), None) or min(idx, key=idx.get)
+        base += idx[cod] * stride[k]
+    tk, tidx = ids.index("time"), j["dimension"]["time"]["category"]["index"]
+    vals = j["value"]
+    out = {}
+    for t, pos in tidx.items():
+        v = vals.get(str(base + pos * stride[tk])) if isinstance(vals, dict) else vals[base + pos * stride[tk]]
+        if v is not None:
+            out[t] = float(v)
+    return out
+
+
+def atualizar_migracao(hoje: datetime) -> bool:
+    series = {"imigrantes": {}, "emigrantes": {}}
+    pref = {"citizen": ["TOTAL"], "age": ["TOTAL"], "sex": ["T"], "agedef": ["COMPLET", "REACH"], "unit": ["NR"]}
+    for nome, ds in (("imigrantes", "migr_imm1ctz"), ("emigrantes", "migr_emi1ctz")):
+        for filtros in ({"geo": "PT", "citizen": "TOTAL", "age": "TOTAL", "sex": "T"}, {"geo": "PT", "sex": "T", "citizen": "TOTAL"}):
+            try:
+                series[nome] = eurostat(ds, filtros, pref)
+                print(f"{nome}: {len(series[nome])} anos (Eurostat {ds})")
+                break
+            except Exception as e:
+                print(f"{nome}: Eurostat falhou com {filtros} ({e})", file=sys.stderr)
+    return gravar_simples(MIGRACAO, series, {"fonte": "Eurostat (migr_imm1ctz, migr_emi1ctz), a partir de dados do INE", "frequencia": "anual"}, hoje)
+
+
 def main() -> int:
     hoje = datetime.now(timezone.utc)
-    ok_casas = atualizar_casas(hoje)
-    ok_rendas = atualizar_rendas(hoje)
-    return 0 if (ok_casas or ok_rendas) else 1
+    resultados = []
+    for tarefa in (atualizar_casas, atualizar_rendas, atualizar_construcao, atualizar_transacoes, atualizar_migracao):
+        try:
+            resultados.append(tarefa(hoje))
+        except Exception as e:
+            print(f"{tarefa.__name__}: erro inesperado ({e})", file=sys.stderr)
+            resultados.append(False)
+    return 0 if any(resultados) else 1
 
 
 if __name__ == "__main__":
