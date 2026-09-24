@@ -53,6 +53,8 @@ def sem_tempo() -> bool:
 
 # formatos de período que já funcionaram, por indicador: {"0012234": {"prefixo": "S3A", "tipo": "trimestral"}}
 FORMATOS = {}
+INCREMENTAL = False
+LEVE_TRIMESTRES, LEVE_MESES = 8, 15
 
 
 def carregar_formatos():
@@ -224,12 +226,14 @@ def categoria_total(l) -> bool:
 
 def recolher(hoje: datetime, indicador: str = INDICADOR, codigos=None, aceitar=categoria_total) -> dict:
     """Pede um período de cada vez (todas as localidades de uma vez) e junta os que interessam."""
+    quantos = LEVE_TRIMESTRES if INCREMENTAL and indicador in FORMATOS else TRIMESTRES
     if codigos is None:
-        codigos = codigos_da_ficha(indicador)
-        if codigos:
-            codigos = sorted(codigos, reverse=True)[:TRIMESTRES]
-        else:
-            codigos = codigos_guardados(indicador, hoje, TRIMESTRES + 2)
+        # no modo leve, se o formato já é conhecido, nem precisa da ficha
+        codigos = codigos_guardados(indicador, hoje, quantos + 2) if INCREMENTAL else []
+        if not codigos:
+            codigos = sorted(codigos_da_ficha(indicador), reverse=True)[:quantos]
+        if not codigos:
+            codigos = codigos_guardados(indicador, hoje, quantos + 2)
             if not codigos:
                 formato = descobrir_formato(hoje, indicador)
                 if not formato:
@@ -274,7 +278,7 @@ def recolher(hoje: datetime, indicador: str = INDICADOR, codigos=None, aceitar=c
         if novos:
             obtidos += 1
         print(f"{codigo}: {novos} valores")
-        time.sleep(0.5)
+        time.sleep(1)
     return por_local
 
 
@@ -342,6 +346,8 @@ def e_rendas_trimestral(nome: str) -> bool:
 
 def procurar_indicador_rendas(guardado: str | None) -> str | None:
     """Procura, pela ficha, o código do indicador trimestral das rendas (o INE não o divulga de forma fácil)."""
+    if guardado and INCREMENTAL and guardado in FORMATOS:
+        return guardado
     candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for c in range(14700, 14780)] + [f"{c:07d}" for c in range(14600, 14700)]
     vistos, erros_seguidos = set(), 0
     for c in candidatos:
@@ -469,7 +475,11 @@ def descobrir_codigos(indicador: str, hoje: datetime) -> list:
 
 def serie_nacional(indicador: str, hoje: datetime, aceitar=categoria_total, maximo: int = 120) -> dict:
     """Valores de Portugal (PT) por período, pedidos um período de cada vez."""
-    codigos = codigos_periodo_ficha(indicador)[:maximo] or codigos_guardados(indicador, hoje, maximo if FORMATOS.get(indicador, {}).get("tipo") == "mensal" else 44) or descobrir_codigos(indicador, hoje)
+    mensal = FORMATOS.get(indicador, {}).get("tipo") == "mensal"
+    if INCREMENTAL and indicador in FORMATOS:
+        codigos = codigos_guardados(indicador, hoje, LEVE_MESES if mensal else LEVE_TRIMESTRES)
+    else:
+        codigos = codigos_periodo_ficha(indicador)[:maximo] or codigos_guardados(indicador, hoje, maximo if mensal else 44) or descobrir_codigos(indicador, hoje)
     if not codigos:
         raise RuntimeError(f"{indicador}: não foi possível descobrir os códigos dos períodos")
     out, falhas, obtidos = {}, 0, 0
@@ -497,7 +507,7 @@ def serie_nacional(indicador: str, hoje: datetime, aceitar=categoria_total, maxi
                     obtidos += 1
                 except ValueError:
                     pass
-        time.sleep(0.3)
+        time.sleep(1)
     print(f"{indicador}: {len(out)} períodos")
     return out
 
@@ -518,6 +528,8 @@ def para_trimestres(serie: dict) -> dict:
 
 
 def procurar_indicador(nome_curto: str, teste, intervalos, guardado=None):
+    if guardado and INCREMENTAL and guardado in FORMATOS:
+        return guardado  # já conhecido e já funcionou: não é preciso confirmar
     candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for a, b in intervalos for c in range(a, b)]
     vistos, erros = set(), 0
     for c in candidatos:
@@ -664,11 +676,36 @@ def atualizar_migracao(hoje: datetime) -> bool:
     return gravar_simples(MIGRACAO, series, {"fonte": "Eurostat (migr_imm1ctz, migr_emi1ctz), a partir de dados do INE", "frequencia": "anual"}, hoje)
 
 
+def ine_acessivel() -> bool:
+    for n in range(3):
+        try:
+            req = urllib.request.Request(INE_URL + "?" + urllib.parse.urlencode({"op": "2", "varcd": INDICADOR, "Dim1": "X", "lang": "PT"}), headers=CABECALHOS)
+            with urllib.request.urlopen(req, timeout=40) as r:
+                r.read(200)
+            return True
+        except urllib.error.HTTPError:
+            return True  # respondeu, mesmo que com erro: está acessível
+        except Exception as e:
+            print(f"Teste de ligação ao INE {n + 1}/3: {e}", file=sys.stderr)
+            time.sleep(20)
+    return False
+
+
 def main() -> int:
+    global INCREMENTAL
     hoje = datetime.now(timezone.utc)
     carregar_formatos()
+    # se já há dados guardados, só pede os períodos mais recentes (o histórico fica no ficheiro)
+    INCREMENTAL = bool(FORMATOS)
+    if INCREMENTAL:
+        print("Modo leve: só os períodos mais recentes (o histórico já está guardado).")
+    tarefas = [atualizar_casas, atualizar_rendas, atualizar_construcao, atualizar_transacoes]
+    if not ine_acessivel():
+        print("O INE não está acessível a partir do GitHub neste momento. Os dados guardados ficam como estão; "
+              "a tarefa volta a tentar amanhã.", file=sys.stderr)
+        tarefas = []
     resultados = []
-    for tarefa in (atualizar_casas, atualizar_rendas, atualizar_construcao, atualizar_transacoes, atualizar_migracao):
+    for tarefa in tarefas + [atualizar_migracao]:
         try:
             resultados.append(tarefa(hoje))
         except Exception as e:
