@@ -42,6 +42,54 @@ CABECALHOS = {
 }
 
 
+INICIO = time.time()
+ORCAMENTO = float(os.environ.get("ORCAMENTO_MINUTOS", "35")) * 60
+
+
+def sem_tempo() -> bool:
+    """True quando já se gastou o tempo disponível: o programa pára de pedir e grava o que tem."""
+    return time.time() - INICIO > ORCAMENTO
+
+
+# formatos de período que já funcionaram, por indicador: {"0012234": {"prefixo": "S3A", "tipo": "trimestral"}}
+FORMATOS = {}
+
+
+def carregar_formatos():
+    pasta = os.path.join(os.path.dirname(__file__), "..", "dados")
+    if not os.path.isdir(pasta):
+        return
+    for nome in os.listdir(pasta):
+        if nome.endswith(".json"):
+            try:
+                with open(os.path.join(pasta, nome), encoding="utf-8") as f:
+                    FORMATOS.update(json.load(f).get("formatos") or {})
+            except Exception:
+                pass
+
+
+def registar_formato(indicador: str, codigo: str):
+    m = re.match(r"^(S\dA)(\d{4})(\d+)$", codigo or "")
+    if m:
+        FORMATOS[indicador] = {"prefixo": m.group(1), "tipo": "mensal" if len(m.group(3)) == 2 else "trimestral"}
+
+
+def codigos_guardados(indicador: str, hoje: datetime, quantos: int) -> list:
+    f = FORMATOS.get(indicador)
+    if not f:
+        return []
+    p, mensal = f["prefixo"], f["tipo"] == "mensal"
+    y, k = hoje.year, (hoje.month if mensal else (hoje.month - 1) // 3 + 1)
+    out = []
+    for _ in range(quantos):
+        out.append(f"{p}{y}{k:02d}" if mensal else f"{p}{y}{k}")
+        k -= 1
+        if k < 1:
+            k, y = (12 if mensal else 4), y - 1
+    print(f"{indicador}: a usar o formato guardado ({p}, {f['tipo']})")
+    return out
+
+
 class ErroINE(Exception):
     """O INE respondeu, mas com uma mensagem de erro (por exemplo, trimestre ainda não publicado)."""
 
@@ -52,7 +100,7 @@ def pedir(params: dict, tentativas: int = 3) -> list:
     for n in range(tentativas):
         try:
             req = urllib.request.Request(url, headers=CABECALHOS)
-            with urllib.request.urlopen(req, timeout=180) as r:
+            with urllib.request.urlopen(req, timeout=90) as r:
                 dados = json.loads(r.read().decode("utf-8"))
             raiz = dados[0] if isinstance(dados, list) else dados
             if isinstance(raiz, dict) and "Sucesso" in raiz and "Falso" in raiz["Sucesso"]:
@@ -63,7 +111,8 @@ def pedir(params: dict, tentativas: int = 3) -> list:
         except Exception as e:  # rede lenta, erro temporário…
             ultimo = e
             print(f"  tentativa {n + 1} falhou: {e}", file=sys.stderr)
-            time.sleep(10 * (n + 1))
+            if not sem_tempo():
+                time.sleep(5 * (n + 1))
     raise RuntimeError(f"o INE não respondeu: {ultimo}")
 
 
@@ -103,7 +152,7 @@ def quarter_de_codigo(codigo: str):
     return f"{m.group(1)}-Q{m.group(2)}" if m else None
 
 
-def ficha(indicador: str, timeout: int = 120) -> str:
+def ficha(indicador: str, timeout: int = 45) -> str:
     url = INE_URL.replace("pindica.jsp", "pindicaMeta.jsp") + "?" + urllib.parse.urlencode({"varcd": indicador, "lang": "PT"})
     req = urllib.request.Request(url, headers=CABECALHOS)
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -142,6 +191,8 @@ def descobrir_formato(hoje: datetime, indicador: str = INDICADOR):
     for (yy, tt) in candidatos_q[1:3]:  # trimestres quase certamente já publicados
         for f in formatos:
             for p in prefixos:
+                if sem_tempo():
+                    return None
                 codigo = f(p, yy, tt)
                 try:
                     dados = pedir({"varcd": indicador, "Dim1": codigo, "Dim2": "PT"}, tentativas=1)
@@ -178,16 +229,21 @@ def recolher(hoje: datetime, indicador: str = INDICADOR, codigos=None, aceitar=c
         if codigos:
             codigos = sorted(codigos, reverse=True)[:TRIMESTRES]
         else:
-            formato = descobrir_formato(hoje, indicador)
-            if not formato:
-                raise RuntimeError("não foi possível descobrir o formato dos trimestres aceite pelo INE")
-            codigos = lista_trimestres(hoje, formato)
+            codigos = codigos_guardados(indicador, hoje, TRIMESTRES + 2)
+            if not codigos:
+                formato = descobrir_formato(hoje, indicador)
+                if not formato:
+                    raise RuntimeError("não foi possível descobrir o formato dos trimestres aceite pelo INE")
+                codigos = lista_trimestres(hoje, formato)
 
     alvo = {c: nome for nome, cs in LOCALIDADES.items() for c in cs}
     nomes = {n.lower(): n for n in LOCALIDADES}
     por_local = {n: {} for n in LOCALIDADES}
     obtidos, falhas_seguidas = 0, 0
     for codigo in codigos:
+        if sem_tempo():
+            print(f"{indicador}: sem tempo, a gravar o que já tenho.", file=sys.stderr)
+            break
         try:
             dados = pedir({"varcd": indicador, "Dim1": codigo})
         except ErroINE as e:
@@ -197,6 +253,7 @@ def recolher(hoje: datetime, indicador: str = INDICADOR, codigos=None, aceitar=c
                 break  # chegámos ao início da série
             continue
         falhas_seguidas = 0
+        registar_formato(indicador, codigo)
         raiz = dados[0] if isinstance(dados, list) else dados
         n_antes = sum(len(v) for v in por_local.values())
         for rotulo, linhas in (raiz.get("Dados") or {}).items():
@@ -227,14 +284,15 @@ def gravar(ficheiro: str, por_local: dict, extra: dict, hoje: datetime) -> bool:
         with open(ficheiro, encoding="utf-8") as f:
             antigo = json.load(f)
     antigos = {nome: dict(zip(antigo.get("periodos", []), serie)) for nome, serie in (antigo.get("valores") or {}).items()}
-    for nome in LOCALIDADES:  # não perder uma localidade se o INE falhar só nela
-        if not por_local.get(nome) and antigos.get(nome) and antigo.get("frequencia", "trimestral") == extra.get("frequencia"):
-            por_local[nome] = {k: v for k, v in antigos[nome].items() if v is not None}
+    if antigo.get("frequencia", "trimestral") == extra.get("frequencia"):
+        for nome in LOCALIDADES:  # juntar ao que já havia: os valores novos substituem, os antigos que faltam ficam
+            velhos = {k: v for k, v in (antigos.get(nome) or {}).items() if v is not None}
+            por_local[nome] = {**velhos, **(por_local.get(nome) or {})}
     periodos = sorted({q for s in por_local.values() for q in s})
-    novo = {**extra, "periodos": periodos,
+    novo = {**extra, "formatos": dict(FORMATOS), "periodos": periodos,
             "valores": {n: [por_local.get(n, {}).get(q) for q in periodos] for n in LOCALIDADES}}
-    chaves = [k for k in novo if k != "atualizado"]
-    if {k: antigo.get(k) for k in chaves} == {k: novo[k] for k in chaves}:
+    chaves = [k for k in novo if k not in ("atualizado", "formatos")]
+    if {k: antigo.get(k) for k in chaves} == {k: novo[k] for k in chaves} and antigo.get("formatos"):
         print(f"{os.path.basename(ficheiro)}: sem alterações.")
         return True
     novo["atualizado"] = hoje.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -287,6 +345,8 @@ def procurar_indicador_rendas(guardado: str | None) -> str | None:
     candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for c in range(14700, 14780)] + [f"{c:07d}" for c in range(14600, 14700)]
     vistos, erros_seguidos = set(), 0
     for c in candidatos:
+        if sem_tempo():
+            break
         if c in vistos:
             continue
         vistos.add(c)
@@ -380,6 +440,8 @@ def descobrir_codigos(indicador: str, hoje: datetime) -> list:
     prefixos = ["S3A", "S5A", "S4A", "S6A", "S2A", "S1A", "S7A"]
     y, m = hoje.year, hoje.month
     for recuo in (4, 6):  # meses atrás
+        if sem_tempo():
+            return []
         yy, mm = y, m - recuo
         while mm < 1:
             mm += 12
@@ -407,11 +469,14 @@ def descobrir_codigos(indicador: str, hoje: datetime) -> list:
 
 def serie_nacional(indicador: str, hoje: datetime, aceitar=categoria_total, maximo: int = 120) -> dict:
     """Valores de Portugal (PT) por período, pedidos um período de cada vez."""
-    codigos = codigos_periodo_ficha(indicador)[:maximo] or descobrir_codigos(indicador, hoje)
+    codigos = codigos_periodo_ficha(indicador)[:maximo] or codigos_guardados(indicador, hoje, maximo if FORMATOS.get(indicador, {}).get("tipo") == "mensal" else 44) or descobrir_codigos(indicador, hoje)
     if not codigos:
         raise RuntimeError(f"{indicador}: não foi possível descobrir os códigos dos períodos")
     out, falhas, obtidos = {}, 0, 0
     for c in codigos:
+        if sem_tempo():
+            print(f"{indicador}: sem tempo, a gravar o que já tenho.", file=sys.stderr)
+            break
         try:
             dados = pedir({"varcd": indicador, "Dim1": c, "Dim2": "PT"})
         except ErroINE:
@@ -420,6 +485,7 @@ def serie_nacional(indicador: str, hoje: datetime, aceitar=categoria_total, maxi
                 break
             continue
         falhas = 0
+        registar_formato(indicador, c)
         raiz = dados[0] if isinstance(dados, list) else dados
         for rotulo, linhas in (raiz.get("Dados") or {}).items():
             per = periodo(rotulo, c)
@@ -455,6 +521,8 @@ def procurar_indicador(nome_curto: str, teste, intervalos, guardado=None):
     candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for a, b in intervalos for c in range(a, b)]
     vistos, erros = set(), 0
     for c in candidatos:
+        if sem_tempo():
+            break
         if c in vistos:
             continue
         vistos.add(c)
@@ -484,15 +552,16 @@ def ler(ficheiro: str) -> dict:
 def gravar_simples(ficheiro: str, series: dict, extra: dict, hoje: datetime) -> bool:
     antigo = ler(ficheiro)
     ant = {n: dict(zip(antigo.get("periodos", []), v)) for n, v in (antigo.get("valores") or {}).items()}
-    for n in list(series):
-        if not series[n] and ant.get(n):
-            series[n] = {k: v for k, v in ant[n].items() if v is not None}
+    if antigo.get("frequencia") == extra.get("frequencia"):
+        for n in list(series):  # juntar ao que já havia: os valores novos substituem, os antigos que faltam ficam
+            velhos = {k: v for k, v in (ant.get(n) or {}).items() if v is not None}
+            series[n] = {**velhos, **(series.get(n) or {})}
     if not any(series.values()):
         return False
     periodos = sorted({k for s_ in series.values() for k in s_})
-    novo = {**extra, "periodos": periodos, "valores": {n: [series[n].get(p) for p in periodos] for n in series}}
-    chaves = [k for k in novo if k != "atualizado"]
-    if {k: antigo.get(k) for k in chaves} == {k: novo[k] for k in chaves}:
+    novo = {**extra, "formatos": dict(FORMATOS), "periodos": periodos, "valores": {n: [series[n].get(p) for p in periodos] for n in series}}
+    chaves = [k for k in novo if k not in ("atualizado", "formatos")]
+    if {k: antigo.get(k) for k in chaves} == {k: novo[k] for k in chaves} and antigo.get("formatos"):
         print(f"{os.path.basename(ficheiro)}: sem alterações.")
         return True
     novo["atualizado"] = hoje.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -597,6 +666,7 @@ def atualizar_migracao(hoje: datetime) -> bool:
 
 def main() -> int:
     hoje = datetime.now(timezone.utc)
+    carregar_formatos()
     resultados = []
     for tarefa in (atualizar_casas, atualizar_rendas, atualizar_construcao, atualizar_transacoes, atualizar_migracao):
         try:
