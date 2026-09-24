@@ -54,6 +54,28 @@ def sem_tempo() -> bool:
 # formatos de período que já funcionaram, por indicador: {"0012234": {"prefixo": "S3A", "tipo": "trimestral"}}
 FORMATOS = {}
 INCREMENTAL = False
+FALHAS_REDE, LIMITE_FALHAS = 0, 4
+
+
+class INEEmBaixo(RuntimeError):
+    pass
+
+
+def rede_ok():
+    global FALHAS_REDE
+    FALHAS_REDE = 0
+
+
+def rede_falhou():
+    global FALHAS_REDE
+    FALHAS_REDE += 1
+    if FALHAS_REDE == LIMITE_FALHAS:
+        print(f"O INE não respondeu a {LIMITE_FALHAS} pedidos seguidos: paro de o contactar nesta corrida "
+              "(os dados guardados ficam como estão).", file=sys.stderr)
+
+
+def ine_em_baixo() -> bool:
+    return FALHAS_REDE >= LIMITE_FALHAS
 LEVE_TRIMESTRES, LEVE_MESES = 8, 15
 
 
@@ -96,21 +118,30 @@ class ErroINE(Exception):
     """O INE respondeu, mas com uma mensagem de erro (por exemplo, trimestre ainda não publicado)."""
 
 
-def pedir(params: dict, tentativas: int = 3) -> list:
+def pedir(params: dict, tentativas: int = 2) -> list:
     url = INE_URL + "?" + urllib.parse.urlencode({"op": "2", "lang": "PT", **params})
     ultimo = None
     for n in range(tentativas):
+        if ine_em_baixo():
+            raise INEEmBaixo("o INE não está a responder")
         try:
             req = urllib.request.Request(url, headers=CABECALHOS)
-            with urllib.request.urlopen(req, timeout=90) as r:
+            with urllib.request.urlopen(req, timeout=45) as r:
                 dados = json.loads(r.read().decode("utf-8"))
+            rede_ok()
             raiz = dados[0] if isinstance(dados, list) else dados
             if isinstance(raiz, dict) and "Sucesso" in raiz and "Falso" in raiz["Sucesso"]:
                 raise ErroINE(raiz["Sucesso"]["Falso"][0].get("Msg", "erro desconhecido"))
             return dados
         except ErroINE:
             raise
-        except Exception as e:  # rede lenta, erro temporário…
+        except urllib.error.HTTPError as e:  # respondeu, mas com erro HTTP
+            rede_ok()
+            ultimo = e
+            print(f"  tentativa {n + 1} falhou: {e}", file=sys.stderr)
+            continue
+        except Exception as e:  # sem ligação, tempo esgotado…
+            rede_falhou()
             ultimo = e
             print(f"  tentativa {n + 1} falhou: {e}", file=sys.stderr)
             if not sem_tempo():
@@ -155,10 +186,21 @@ def quarter_de_codigo(codigo: str):
 
 
 def ficha(indicador: str, timeout: int = 45) -> str:
+    if ine_em_baixo():
+        raise INEEmBaixo("o INE não está a responder")
     url = INE_URL.replace("pindica.jsp", "pindicaMeta.jsp") + "?" + urllib.parse.urlencode({"varcd": indicador, "lang": "PT"})
     req = urllib.request.Request(url, headers=CABECALHOS)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            texto = r.read().decode("utf-8", "replace")
+        rede_ok()
+        return texto
+    except urllib.error.HTTPError:
+        rede_ok()
+        raise
+    except Exception:
+        rede_falhou()
+        raise
 
 
 def codigos_da_ficha(indicador: str = INDICADOR) -> list:
@@ -193,7 +235,7 @@ def descobrir_formato(hoje: datetime, indicador: str = INDICADOR):
     for (yy, tt) in candidatos_q[1:3]:  # trimestres quase certamente já publicados
         for f in formatos:
             for p in prefixos:
-                if sem_tempo():
+                if sem_tempo() or ine_em_baixo():
                     return None
                 codigo = f(p, yy, tt)
                 try:
@@ -245,6 +287,8 @@ def recolher(hoje: datetime, indicador: str = INDICADOR, codigos=None, aceitar=c
     por_local = {n: {} for n in LOCALIDADES}
     obtidos, falhas_seguidas = 0, 0
     for codigo in codigos:
+        if ine_em_baixo():
+            break
         if sem_tempo():
             print(f"{indicador}: sem tempo, a gravar o que já tenho.", file=sys.stderr)
             break
@@ -351,7 +395,7 @@ def procurar_indicador_rendas(guardado: str | None) -> str | None:
     candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for c in range(14700, 14780)] + [f"{c:07d}" for c in range(14600, 14700)]
     vistos, erros_seguidos = set(), 0
     for c in candidatos:
-        if sem_tempo():
+        if sem_tempo() or ine_em_baixo():
             break
         if c in vistos:
             continue
@@ -446,7 +490,7 @@ def descobrir_codigos(indicador: str, hoje: datetime) -> list:
     prefixos = ["S3A", "S5A", "S4A", "S6A", "S2A", "S1A", "S7A"]
     y, m = hoje.year, hoje.month
     for recuo in (4, 6):  # meses atrás
-        if sem_tempo():
+        if sem_tempo() or ine_em_baixo():
             return []
         yy, mm = y, m - recuo
         while mm < 1:
@@ -484,6 +528,8 @@ def serie_nacional(indicador: str, hoje: datetime, aceitar=categoria_total, maxi
         raise RuntimeError(f"{indicador}: não foi possível descobrir os códigos dos períodos")
     out, falhas, obtidos = {}, 0, 0
     for c in codigos:
+        if ine_em_baixo():
+            break
         if sem_tempo():
             print(f"{indicador}: sem tempo, a gravar o que já tenho.", file=sys.stderr)
             break
@@ -533,7 +579,7 @@ def procurar_indicador(nome_curto: str, teste, intervalos, guardado=None):
     candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for a, b in intervalos for c in range(a, b)]
     vistos, erros = set(), 0
     for c in candidatos:
-        if sem_tempo():
+        if sem_tempo() or ine_em_baixo():
             break
         if c in vistos:
             continue
