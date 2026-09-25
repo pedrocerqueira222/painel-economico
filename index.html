@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Boletim Económico</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317202B'/%3E%3Crect x='12' y='34' width='9' height='18' rx='2' fill='%235CC2B8'/%3E%3Crect x='27.5' y='24' width='9' height='28' rx='2' fill='%236FA8DC'/%3E%3Crect x='43' y='14' width='9' height='38' rx='2' fill='%23EE8E62'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAsElEQVR4nGNkwALEFbT/YxOnFLx8cJURXQxFgFYW43MIE70tR7eLid6WozuCiZBCWgPGgfA9MhjwEKCpA67nmaPQdHUAuqW4HDG8o2D4OyCiYyMKTVcHoFtKriOGdhQMfwe4LupFoenqAHRLaeWIwR0Fow4YdcDIdsDuuGK8/BUV/nj5mpNO4uXDACMDw8D0CxgYID2kwREF2DqNtAYwO5nQBehpOQMDWu8YBujZPQcAeJQ8n8BtrFUAAAAASUVORK5CYII=">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAD60lEQVR4nO3cvXETQQCG4ZWHHpw69bgAKiAmJXIJJE4ogYSEEohIianABXhInboKEzD2YJDk+9m9W333PAWsLnj1eWXNaFc6cH5x9bj2MzDfw/3dbu1nWOUBBLwNawS+2AuKeNuWirvpi4iYfVrG3eRgITNEi7DPah8oZoZq0Uq1d4iQmaPWWldZaDEzV62GZr0rhEwLc9Z68kKLmVbmtDUpaDHT2tTGRgctZpYypbVRQYuZpY1tbnDQYmYtY9obFLSYWdvQBl8NWsz0YkiL1b/6hjUdDdo605vXmjwYtJjp1bE2XTmIsjdo60zvDjX6X9Bi5lTsa9WVgygvgrbOnJp/m7XQRBE0UZ6Ddt3gVP3droUmiqCJclaK6wan76lhC00UQRNF0ETZuT+TxEITRdBEETRRBE0UQRPlzdoPwLJ+fXxb9bzLr7dVz5vLQm9I7ZhbnTmHoDeiZXg9RS3oDVgiuF6iFjRRBE0UQRNF0EQRNFEETRRBE0XQRBE0UQRNFEETRdBEETRRBE0UQRNF0EQRNFEETRRBE0XQRBE0UQRNFEETRdBEETRR/FjjTB8+/6h+5vdP76ufuRUWeoYWMbc8dwsEPVHr6EQ9jaAnWCo2UY8naKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoInS5W/bvfv2pep5P69vqp5Hv7pb6NoxtzqTPnUVdMvwRL0N3QS9RHCiztdN0FCDoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKN0E/fP65mRe4/un91XOWep1Lr/eVjln7dcYopugS2kbde2zW0dd+/yWwfUScymdBV1Km6hbvVFaRd3q3Bbh9RRzKaXsSinl/OLqce0Hgbke7u923S00zCFoogiaKGel/Ll7rP0gMMdTwxaaKIImynPQrh2cqr/btdBEETRRXgTt2sGp+bdZC02U/4K20pyKfa3uXWhR07tDjbpyEOVg0FaaXh1r8+hCi5revNakKwdRXg3aStOLIS0OWmhRs7ahDQ6+coiatYxpb9QdWtQsbWxzoz8UipqlTGlt0n85RE1rUxub/G87UdPKnLaqROmHaqihxkhW+WLFWjNXrYaqh2itGaP2GFb/6ttaM1SLVprGZ63Zp+XoLbam4t62pf5yr3I9EPc2rHH97OK+K/AMPXx++g1oLPnBBZbD7wAAAABJRU5ErkJggg==">
+<meta name="theme-color" content="#17202B">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -171,7 +175,6 @@
   <nav class="tabs" id="tabs" role="tablist" aria-label="Separadores">
     <button role="tab" data-tab="eco" aria-selected="true">Económico</button>
     <button role="tab" data-tab="hab" aria-selected="false">Habitação</button>
-    <button role="tab" data-tab="op" aria-selected="false">Oferta e Procura</button>
     <button role="tab" data-tab="mkt" aria-selected="false">Mercados</button>
   </nav>
 
@@ -183,11 +186,6 @@
   <section class="block" data-tab="hab" aria-labelledby="b-hab" hidden>
     <h2 id="b-hab" class="visually-hidden">Habitação</h2>
     <div id="modules-hab"></div>
-  </section>
-
-  <section class="block" data-tab="op" aria-labelledby="b-op" hidden>
-    <h2 id="b-op" class="visually-hidden">Oferta e Procura</h2>
-    <div id="modules-op"></div>
   </section>
 
   <section class="block" data-tab="mkt" aria-labelledby="b-mkt" hidden>
@@ -1169,7 +1167,7 @@ const lineSet = (s, data, visible, extra = {}) => ({ type: "line", label: s.labe
 
 /* ---------- Construção ---------- */
 const BUILD = {
-  key: "build", container: "modules-op", sourceName: "GitHub",
+  key: "build", container: "modules-hab", sourceName: "GitHub",
   title: "Construção: licenças e casas concluídas",
   defaultYears: 10, perYear: 4,
   source: `Fogos licenciados e fogos concluídos em construções novas para habitação familiar, por trimestre, em Portugal. As licenças antecipam as casas que vão ficar prontas nos 2 a 3 anos seguintes.
@@ -1230,7 +1228,7 @@ const BUILD = {
 
 /* ---------- Transações e crédito ---------- */
 const DEMAND = {
-  key: "demand", container: "modules-op",
+  key: "demand", container: "modules-hab",
   title: "Procura: casas vendidas e crédito à habitação",
   defaultYears: 10, perYear: 4,
   source: `Casas vendidas: número de alojamentos familiares transacionados por trimestre em Portugal (INE, copiado pela tarefa do GitHub).
@@ -1306,7 +1304,7 @@ const DEMAND = {
 
 /* ---------- Pessoas que chegam ---------- */
 const MIGR = {
-  key: "migr", container: "modules-op", sourceName: "GitHub",
+  key: "migr", container: "modules-hab", sourceName: "GitHub",
   title: "Pessoas que chegam a Portugal",
   defaultYears: 10, perYear: 1,
   source: `Imigrantes: pessoas que passaram a viver em Portugal durante o ano (por um período de pelo menos 12 meses). Emigrantes: as que deixaram de viver cá. Saldo: a diferença entre as duas.
@@ -2656,6 +2654,7 @@ async function loadAll(force = false) {
 $("refresh").onclick = () => loadAll(true);
 // separadores
 function showTab(t) {
+  if (t === "op") t = "hab";
   const ok = [...document.querySelectorAll("#tabs button")].some(b => b.dataset.tab === t);
   if (!ok) t = "eco";
   document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === t)));

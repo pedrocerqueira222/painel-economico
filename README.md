@@ -4,7 +4,7 @@ Painel pessoal com os principais indicadores da economia e da habitação em Por
 
 **Abrir o painel:** https://pedrocerqueira222.github.io/painel-economico/
 
-A página tem quatro separadores: **Económico**, **Habitação**, **Oferta e Procura** e **Mercados**. A página lembra-se do último separador aberto, e o endereço muda para cada um (por exemplo `…/painel-economico/#mkt`), por isso dá para guardar um separador nos favoritos.
+A página tem três separadores: **Económico**, **Habitação** e **Mercados**. A página lembra-se do último separador aberto, e o endereço muda para cada um (por exemplo `…/painel-economico/#mkt`), por isso dá para guardar um separador nos favoritos.
 
 Cada gráfico abre com um clique no título e mostra um comentário automático, que é escrito a partir dos dados mais recentes. Exemplos: *"O dinheiro está a ficar mais caro"*, *"O poder de compra está a aumentar"*, *"A procura de casas está muito forte"*.
 
@@ -37,14 +37,10 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 | Juros do crédito à habitação | Quanto cobram os bancos nos créditos novos? | Taxa média dos novos empréstimos à habitação e Euribor a 12 meses |
 | Novos créditos à habitação | As famílias estão a pedir mais ou menos crédito? | Montante de novos empréstimos por mês, média de 12 meses e renegociações |
 | Prestação do crédito à habitação | Quanto custa financiar uma casa? | Prestação de 200 000 € e 100 000 € a 30 anos, com Euribor + spread (escolhe-se no gráfico) |
-
-### Oferta e Procura
-
-| Gráfico | Pergunta a que responde | Dados |
-|---|---|---|
 | Construção | Estamos a construir casas suficientes? | Fogos licenciados e fogos concluídos em construções novas, comparados com o aumento de população vindo da migração |
 | Procura | Quão forte está a procura? | Número de casas vendidas e crédito à habitação novo concedido pelos bancos |
 | Pessoas que chegam a Portugal | Quantas pessoas entram e saem todos os anos? | Imigrantes, emigrantes e saldo migratório |
+
 
 ### Mercados
 
