@@ -1,5 +1,13 @@
 {
  "fonte": "INE, indicador 0012234 (valor mediano das vendas por m², últimos 12 meses)",
+ "indicador": "0012234",
+ "frequencia": "trimestral",
+ "formatos": {
+  "0012234": {
+   "prefixo": "S5A",
+   "tipo": "trimestral"
+  }
+ },
  "periodos": [
   "2019-Q4",
   "2020-Q1",
@@ -198,5 +206,5 @@
    2204.0
   ]
  },
- "atualizado": "2026-09-23T16:03:22Z"
+ "atualizado": "2026-09-25T09:27:04Z"
 }
