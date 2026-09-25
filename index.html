@@ -249,6 +249,95 @@ function monthsBetween(from, to) {
 const thisMonth = () => { const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0"); };
 
 /* =====================================================================
+   MÓDULO — Inflação (Portugal vs zona euro, IHPC)
+   ===================================================================== */
+const INFL = {
+  key: "infl",
+  title: "Inflação",
+  defaultYears: 5, perYear: 12,
+  source: `Variação anual do índice harmonizado de preços no consumidor (IHPC), mês a mês. É o índice usado pelo BCE e pelo Eurostat; o IPC que o INE destaca nas notícias usa pesos diferentes e costuma diferir umas décimas.
+    Subjacente: exclui energia, alimentação, bebidas alcoólicas e tabaco, os preços que mais oscilam. A meta do BCE é 2% na zona euro.
+    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/HICP" target="_blank" rel="noopener">BCE Data Portal</a> (dados do Eurostat).`,
+  series: [
+    { id: "PT",   label: "Portugal",            short: "Portugal",   color: "--inf", code: "PT|000000", bold: true },
+    { id: "U2",   label: "Zona euro",           short: "Zona euro",  color: "--bde", code: "U2|000000", dashed: true },
+    { id: "CORE", label: "Subjacente Portugal", short: "Subjacente", color: "--m3",  code: "PT|XEF000" },
+    { id: "ENE",  label: "Energia Portugal",    short: "Energia",    color: "--m6",  code: "PT|NRGY00", off: true },
+    { id: "SERV", label: "Serviços Portugal",   short: "Serviços",   color: "--m12", code: "PT|SERV00", off: true },
+  ],
+  async load(prev) {
+    const rows = await getCSV(ECB + "HICP/M.PT+U2.N.000000+XEF000+NRGY00+SERV00.4D0.ANR?format=csvdata&startPeriod=2000-01");
+    const by = {};
+    for (const r of rows) {
+      if (r.v == null) continue;
+      const p = r.key.split(".");            // HICP.M.PT.N.000000.4D0.ANR
+      (by[p[2] + "|" + p[4]] ||= {})[r.t] = r.v;
+    }
+    if (!by["PT|000000"]) throw new Error("o BCE não devolveu a inflação de Portugal");
+    const all = Object.values(by).flatMap(o => Object.keys(o)).sort();
+    const periods = monthsBetween(all[0], all[all.length - 1]);
+    const values = {}, errors = [];
+    for (const s of this.series) {
+      const o = by[s.code];
+      if (!o) errors.push(s.label.toLowerCase() + ": sem valores no BCE");
+      values[s.id] = periods.map(m => o?.[m] ?? null);
+    }
+    return { periods, values, errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const P = d.values.PT, i = lastIdx(P);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const x = P[i], x3 = P[i - 3], x12 = P[i - 12];
+    let text, color;
+    if (x >= 3) { text = "A inflação está alta"; color = "var(--up)"; }
+    else if (x > 2.5) { text = "A inflação está acima da meta"; color = "var(--up)"; }
+    else if (x >= 1.5) { text = "A inflação está perto da meta de 2%"; color = "var(--down)"; }
+    else if (x >= 0) { text = "A inflação está baixa"; color = "var(--flat)"; }
+    else { text = "Os preços estão a descer"; color = "var(--flat)"; }
+
+    let msg = `Em ${monthLong(d.periods[i])}, os preços em Portugal estavam ${fmt(Math.abs(x), 1)}% ${x >= 0 ? "acima" : "abaixo"} de um ano antes`;
+    if (x3 != null) {
+      const dx = x - x3;
+      msg += Math.abs(dx) < 0.2 ? ", um ritmo praticamente igual ao de há três meses." : `, ${dx > 0 ? "a acelerar" : "a abrandar"} face aos ${fmt(x3, 1)}% de há três meses.`;
+    } else msg += ".";
+    const u = d.values.U2[i];
+    if (u != null) {
+      const g = x - u;
+      msg += Math.abs(g) < 0.2 ? ` Está ao nível da zona euro (${fmt(u, 1)}%).`
+           : ` Está ${fmt(Math.abs(g), 1)} pontos ${g > 0 ? "acima" : "abaixo"} da zona euro (${fmt(u, 1)}%).`;
+    }
+    const c = d.values.CORE[i];
+    if (c != null) {
+      msg += c > x + 0.3 ? ` A inflação subjacente, de ${fmt(c, 1)}%, está acima da total: a subida de preços vai além da energia e da alimentação.`
+           : c < x - 0.3 ? ` A inflação subjacente, de ${fmt(c, 1)}%, está abaixo da total: é sobretudo a energia ou a alimentação que puxa os preços.`
+           : ` A inflação subjacente, de ${fmt(c, 1)}%, está em linha com a total.`;
+    }
+    if (x12 != null && Math.abs(x - x12) >= 0.3) msg += ` Há um ano estava em ${fmt(x12, 1)}%.`;
+    return { text, color, msg };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + monthLabel(d.periods[i]) : ""), value: i >= 0 ? a[i] : null, d: 1, unit: "%",
+               deltas: deltaHTML(a[i], a[i - 1], "vs mês anterior", 1, false, " p.p.") + deltaHTML(a[i], a[i - 12], "vs há um ano", 1, false, " p.p.") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    const n = end - start, target = { type: "line", label: "Meta do BCE (2%)", data: Array(n).fill(2), borderColor: css("--muted"), backgroundColor: css("--muted"),
+      borderWidth: 1, borderDash: [2, 4], pointRadius: 0, pointHoverRadius: 0, order: 3 };
+    return this.series.map(s => ({
+      type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id],
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: s.bold ? 2.75 : 2,
+      borderDash: s.dashed ? [5, 4] : undefined, pointRadius: 0, pointHoverRadius: 4,
+      tension: 0.2, spanGaps: true, order: s.bold ? 0 : 1,
+    })).concat([target]);
+  },
+  label: monthLabel,
+  tooltip: (s, v) => s ? ` ${s.short}: ${fmt(v, 1)}%` : ` Meta do BCE: ${fmt(v, 0)}%`,
+  yTick: v => fmt(v, 0) + "%",
+};
+
+/* =====================================================================
    MÓDULO 1 — Inflação vs salários (Portugal)
    ===================================================================== */
 const INFWAGE = {
@@ -2474,7 +2563,7 @@ const FAM = {
 
 
 /* ---------- ordem dos gráficos ---------- */
-const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, FAM, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS, ETFS, CRYPTO];
+const MODULES = [INFL, INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, FAM, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS, ETFS, CRYPTO];
 /* =====================================================================
    PREVISÕES: FMI (World Economic Outlook) e expectativas do mercado (curva de juros do BCE)
    ===================================================================== */
@@ -2527,6 +2616,14 @@ INFWAGE.fc = function (cd) {
   const map = {}; pairs.forEach(([y, v]) => map[y + "-12"] = v);
   return { periods: monthsBetween(addMonths(last, 1), pairs[pairs.length - 1][0] + "-12"),
            sets: [{ label: "Inflação prevista (FMI, média do ano)", color: "--inf", map, follows: "INF", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: inflação ${fmt(v, 1)}%` }] };
+};
+// --- Inflação: previsão do FMI
+INFL.fc = function (cd) {
+  const last = cd.periods[cd.periods.length - 1]; if (!last) return null;
+  const pairs = imfAfter("PCPIPCH", +last.slice(0, 4) - 1); if (!pairs.length) return null;
+  const map = {}; pairs.forEach(([y, v]) => map[y + "-12"] = v);
+  return { periods: monthsBetween(addMonths(last, 1), pairs[pairs.length - 1][0] + "-12"),
+           sets: [{ label: "Inflação prevista (FMI, média do ano)", color: "--inf", map, follows: "PT", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: inflação ${fmt(v, 1)}%` }] };
 };
 // --- PIB e desemprego (FMI)
 GDPUNE.fc = function (cd) {
@@ -2654,7 +2751,7 @@ function build() {
       els: { verdict: el.querySelector(".verdict"), rates: el.querySelector(".rates"), ranges: el.querySelector(".ranges"),
              canvas: el.querySelector("canvas"), msg: el.querySelector(".msg"), err: el.querySelector(".err") },
     };
-    m.series.forEach(s => st.visible[s.id] = true);
+    m.series.forEach(s => st.visible[s.id] = !s.off);
     if (m.bindControls) m.bindControls(el, () => render(m));
     // abrir / fechar (lembra a escolha)
     const tg = el.querySelector(".toggle"), hint = el.querySelector(".hint");
