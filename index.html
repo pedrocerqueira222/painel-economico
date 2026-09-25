@@ -2017,7 +2017,7 @@ const FUEL = {
   maxAge: 3 * 3600e3,
   async load(prev, force) {
     const j = await mercados(force), c = j.combustiveis;
-    if (!c?.gasolina95) throw new Error("os preços dos combustíveis ainda não foram copiados");
+    if (!c?.gasolina95) throw new Error("os preços dos combustíveis ainda não foram copiados pela tarefa do GitHub (procura \"Combustíveis\" no registo da tarefa para ver o motivo)");
     const G = serieMap(c.gasolina95), D = serieMap(c.gasoleo);
     const periods = [...new Set([...Object.keys(G), ...Object.keys(D)])].sort();
     const br = serieMap(j.series.brent), fx = serieMap(j.series.eurusd);
@@ -2288,8 +2288,114 @@ const STOCKS = {
   yTick: v => fmt(v, 0),
 };
 
+/* ---------- ETFs MSCI World: IWDA e EUNL ---------- */
+const ETFS = {
+  byDate: true, key: "etfs", container: "modules-mkt", sourceName: "GitHub",
+  title: "ETFs MSCI World: IWDA e EUNL",
+  defaultYears: 5, perYear: 252,
+  source: `IWDA e EUNL são o mesmo fundo, o iShares Core MSCI World UCITS ETF (acumulação: os dividendos são reinvestidos, por isso já estão no preço), cotado em bolsas diferentes:
+    IWDA em Amesterdão e EUNL na Xetra (Frankfurt), ambos em euros. As duas linhas quase coincidem; pequenas diferenças vêm da hora de fecho de cada bolsa.
+    Preços de fecho diários. Fonte: Yahoo Finance (dados de mercado, não oficiais), copiados pela tarefa do GitHub. Rentabilidades passadas não garantem rentabilidades futuras; isto não é uma recomendação de investimento.`,
+  series: [
+    { id: "iwda", label: "IWDA (Amesterdão)", short: "IWDA", color: "--lis" },
+    { id: "eunl", label: "EUNL (Xetra)",      short: "EUNL", color: "--opo", dashed: true },
+  ],
+  maxAge: 3 * 3600e3,
+  async load(prev, force) {
+    const j = await mercados(force), a = serieMap(j.series.iwda), b = serieMap(j.series.eunl);
+    const periods = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+    if (!periods.length) throw new Error("ainda não há dados dos ETFs; corre a tarefa no GitHub");
+    return { periods, values: { iwda: periods.map(d => a[d] ?? null), eunl: periods.map(d => b[d] ?? null) }, note: mktNote(j), errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const P = d.periods, main = lastIdx(d.values.eunl) >= lastIdx(d.values.iwda) ? "eunl" : "iwda", A = d.values[main], i = lastIdx(A);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const ytd = varAno(P, A), y1 = varDias(P, A, 365), y5 = varDias(P, A, 1826), m1 = varDias(P, A, 30), near = perto52(P, A);
+    let text, color;
+    if (m1 != null && m1 <= -7) { text = "O MSCI World está a cair"; color = "var(--up)"; }
+    else if (near != null && near >= 0.98) { text = "O MSCI World está em máximos"; color = "var(--down)"; }
+    else if (m1 != null && m1 >= 3) { text = "O MSCI World está a subir"; color = "var(--down)"; }
+    else { text = "O MSCI World está estável"; color = "var(--flat)"; }
+    const nm = main === "eunl" ? "EUNL" : "IWDA";
+    let msg = `No fecho de ${dayLabel(P[i])}, o ${nm} valia ${fmt(A[i], 2)} €: ${pctTxt(ytd)} desde o início do ano, ${pctTxt(y1)} num ano${y5 != null ? " e " + pctTxt(y5, 0) + " em 5 anos" : ""}.`;
+    if (y5 != null) msg += ` Quem investiu 1 000 € há 5 anos teria hoje cerca de ${fmt(Math.round(1000 * (1 + y5 / 100) / 10) * 10, 0)} € (antes de impostos e comissões).`;
+    if (near != null && near < 0.98) msg += ` Está ${fmt((1 - near) * 100, 1)}% abaixo do máximo dos últimos 12 meses.`;
+    return { text, color, msg: msg + (d.note || "") };
+  },
+  rates(d) {
+    const P = d.periods;
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + dLabel(P[i]) : ""), value: i >= 0 ? a[i] : null, d: 2, unit: " €",
+               deltas: deltaHTML(varAno(P, a), 0, "desde o início do ano", 1, true, "%") + deltaHTML(varDias(P, a, 365), 0, "num ano", 1, true, "%") + deltaHTML(varDias(P, a, 1826), 0, "em 5 anos", 0, true, "%") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id],
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: s.dashed ? 1.75 : 2.5, borderDash: s.dashed ? [5, 4] : [], pointRadius: 0, pointHoverRadius: 4, tension: 0.1, spanGaps: true }));
+  },
+  label: dLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 2)} €`,
+  yTick: v => fmt(v, 0) + " €",
+};
+
+/* ---------- Criptomoedas ---------- */
+const CRYPTO = {
+  byDate: true, key: "crypto", container: "modules-mkt", sourceName: "GitHub",
+  title: "Criptomoedas: bitcoin e ethereum",
+  defaultYears: 3, perYear: 365,
+  source: `Preço em euros, fecho diário (as criptomoedas negoceiam todos os dias). Bitcoin no eixo da esquerda, ethereum no da direita.
+    São ativos muito voláteis: quedas de 50% ou mais já aconteceram várias vezes. Fonte: Yahoo Finance (dados de mercado, não oficiais), copiados pela tarefa do GitHub. Isto não é uma recomendação de investimento.`,
+  series: [
+    { id: "btc", label: "Bitcoin",  short: "Bitcoin",  color: "--gold" },
+    { id: "eth", label: "Ethereum", short: "Ethereum", color: "--val" },
+  ],
+  maxAge: 3 * 3600e3,
+  async load(prev, force) {
+    const j = await mercados(force), a = serieMap(j.series.btc), b = serieMap(j.series.eth);
+    const periods = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+    if (!periods.length) throw new Error("ainda não há dados das criptomoedas; corre a tarefa no GitHub");
+    return { periods, values: { btc: periods.map(d => a[d] ?? null), eth: periods.map(d => b[d] ?? null) }, note: mktNote(j), errors: [], fetchedAt: Date.now() };
+  },
+  maxDraw(P, a) { const i = lastIdx(a); let mx = -Infinity, when = null; for (let k = 0; k <= i; k++) if (a[k] != null && a[k] > mx) { mx = a[k]; when = P[k]; } return { dd: (a[i] / mx - 1) * 100, max: mx, when }; },
+  verdict(d) {
+    const P = d.periods, B = d.values.btc, E = d.values.eth, i = lastIdx(B);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const m1 = varDias(P, B, 30), y1 = varDias(P, B, 365), dr = this.maxDraw(P, B);
+    let text, color;
+    if (m1 != null && m1 <= -15) { text = "As criptomoedas estão a cair forte"; color = "var(--up)"; }
+    else if (m1 != null && m1 <= -5) { text = "As criptomoedas estão a cair"; color = "var(--up)"; }
+    else if (dr.dd >= -3) { text = "A bitcoin está em máximos"; color = "var(--down)"; }
+    else if (m1 != null && m1 >= 10) { text = "As criptomoedas estão a subir forte"; color = "var(--down)"; }
+    else if (m1 != null && m1 >= 5) { text = "As criptomoedas estão a subir"; color = "var(--down)"; }
+    else { text = "As criptomoedas estão estáveis"; color = "var(--flat)"; }
+    let msg = `Em ${dayLabel(P[i])}, 1 bitcoin valia ${fmt(Math.round(B[i]), 0)} €: ${pctTxt(m1, 0)} num mês e ${pctTxt(y1, 0)} num ano.`;
+    if (dr.dd < -3) msg += ` Está ${fmt(Math.abs(dr.dd), 0)}% abaixo do máximo de ${fmt(Math.round(dr.max), 0)} €, atingido em ${dayLabel(dr.when)}.`;
+    const iE = lastIdx(E);
+    if (iE >= 0) { const de = this.maxDraw(P, E); msg += ` O ethereum valia ${fmt(Math.round(E[iE]), 0)} € (${pctTxt(varDias(P, E, 30), 0)} num mês, ${pctTxt(varDias(P, E, 365), 0)} num ano)${de.dd < -3 ? `, ${fmt(Math.abs(de.dd), 0)}% abaixo do seu máximo` : ""}.`; }
+    return { text, color, msg: msg + (d.note || "") };
+  },
+  rates(d) {
+    const P = d.periods;
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a), dr = i >= 0 ? this.maxDraw(P, a) : null;
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + dLabel(P[i]) : ""), value: i >= 0 ? a[i] : null, d: 0, unit: " €",
+               deltas: deltaHTML(varDias(P, a, 30), 0, "num mês", 1, true, "%") + deltaHTML(varDias(P, a, 365), 0, "num ano", 0, true, "%") +
+                       (dr && dr.dd < -1 ? `<span>${fmt(Math.abs(dr.dd), 0)}% abaixo do máximo</span>` : "") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id], yAxisID: s.id === "eth" ? "y2" : "y",
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: 2.25, pointRadius: 0, pointHoverRadius: 4, tension: 0.1, spanGaps: true }));
+  },
+  y2: { tick: v => fmt(v, 0) + " €" },
+  label: dLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(Math.round(v), 0)} €`,
+  yTick: v => fmt(v / 1000, 0) + " mil €",
+};
+
 /* ---------- ordem dos gráficos ---------- */
-const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS];
+const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS, ETFS, CRYPTO];
 
 /* ---------- construção e desenho genéricos ---------- */
 const state = {};

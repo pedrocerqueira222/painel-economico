@@ -54,6 +54,8 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 | Ouro e prata | O "porto de abrigo" está a subir? | Preço por onça em euros |
 | Euro vs dólar | O euro está a ficar mais forte ou mais fraco? | Dólares por euro (câmbio de referência do BCE) |
 | Bolsas | Como estão os mercados acionistas? | PSI, Euro Stoxx 50, S&P 500, Nasdaq e MSCI World, todos a começar em 100 |
+| ETFs MSCI World: IWDA e EUNL | Como está o ETF mais usado para investir no mundo? | Preço em € do iShares Core MSCI World em Amesterdão (IWDA) e na Xetra (EUNL) |
+| Criptomoedas | Como estão a bitcoin e o ethereum? | Preço em € e distância ao máximo |
 
 ---
 
@@ -108,7 +110,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
 | [INE](https://www.ine.pt) | Preço mediano das casas vendidas por concelho (0012234), rendas de novos contratos, fogos licenciados e concluídos (0012778), vendas de alojamentos |
 | [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz) e emigração (migr_emi1ctz) |
 | [Comissão Europeia – Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en) | Preço médio da gasolina 95 e do gasóleo em Portugal, com impostos |
-| Yahoo Finance / Stooq | Brent, gás TTF, ouro, prata, PSI, Euro Stoxx 50, S&P 500, Nasdaq, MSCI World (dados de mercado, **não oficiais**) |
+| Yahoo Finance / Stooq | Brent, gás TTF, ouro, prata, PSI, Euro Stoxx 50, S&P 500, Nasdaq, MSCI World, IWDA, EUNL, bitcoin, ethereum (dados de mercado, **não oficiais**) |
 
 Cada gráfico tem por baixo uma nota com a definição exata dos dados e a sua origem.
 
