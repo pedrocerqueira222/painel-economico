@@ -2,7 +2,7 @@ name: Atualizar preço das casas
 
 on:
   schedule:
-    - cron: "0 7 * * *"      # todos os dias às 7h (hora UTC)
+    - cron: "17 * * * *"     # de hora a hora (o programa só vai ao INE se ainda não conseguiu nas últimas 20 h)
   workflow_dispatch:          # permite correr à mão no separador Actions
   push:
     paths:
@@ -28,6 +28,8 @@ jobs:
       - name: Ir buscar os dados ao INE
         timeout-minutes: 45
         continue-on-error: true
+        env:
+          FORCAR: ${{ github.event_name != 'schedule' }}   # corridas à mão ou depois de carregar ficheiros vão sempre ao INE
         run: python scripts/atualizar_casas.py
       - name: Guardar se houver dados novos
         if: always()
