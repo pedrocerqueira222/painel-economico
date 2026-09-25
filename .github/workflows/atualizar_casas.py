@@ -52,7 +52,8 @@ def sem_tempo() -> bool:
 
 
 # formatos de período que já funcionaram, por indicador: {"0012234": {"prefixo": "S3A", "tipo": "trimestral"}}
-FORMATOS = {}
+# confirmado no registo do GitHub (INE, set. 2026): trimestres do indicador 0012234 = S5A + ano + trimestre, desde 2019-Q4
+FORMATOS = {"0012234": {"prefixo": "S5A", "tipo": "trimestral"}}
 INCREMENTAL = False
 FALHAS_REDE, LIMITE_FALHAS = 0, 4
 
@@ -742,7 +743,7 @@ def main() -> int:
     hoje = datetime.now(timezone.utc)
     carregar_formatos()
     # se já há dados guardados, só pede os períodos mais recentes (o histórico fica no ficheiro)
-    INCREMENTAL = bool(FORMATOS)
+    INCREMENTAL = os.path.exists(FICHEIRO)  # há dados guardados: basta pedir os períodos mais recentes
     if INCREMENTAL:
         print("Modo leve: só os períodos mais recentes (o histórico já está guardado).")
     tarefas = [atualizar_casas, atualizar_rendas, atualizar_construcao, atualizar_transacoes]
