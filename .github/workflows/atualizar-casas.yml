@@ -12,18 +12,25 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: atualizar-dados
+  cancel-in-progress: false
+
 jobs:
   atualizar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Ir buscar os dados ao INE
+        timeout-minutes: 45
+        continue-on-error: true
         run: python scripts/atualizar_casas.py
       - name: Guardar se houver dados novos
+        if: always()
         run: |
           git config user.name "atualizador"
           git config user.email "atualizador@users.noreply.github.com"
@@ -36,5 +43,6 @@ jobs:
             echo "Sem dados novos."
           else
             git commit -m "Preço das casas: dados atualizados do INE" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+            git pull --rebase --autostash || true
             git push
           fi
