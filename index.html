@@ -15,6 +15,7 @@
     --gdp: #3A6EA5; --gdp-up: rgba(58,110,165,.45); --gdp-down: rgba(178,58,46,.45); --une: #7A4FB0;
     --pt: #17202B; --lis: #2A6CA3; --opo: #B7801A; --maia: #1F7A74; --val: #8A3B72; --mat: #C0562B;
     --hpi: #C0562B; --ratio: #5B6675; --l200: #8A3B72; --l100: #2A6CA3; --tax: #5B6675;
+    --gas95: #C0562B; --dsl: #3A6EA5; --gold: #B7801A; --silver: #7D8796;
     --bpt: #1F7A74; --bde: #5B6675; --spr: rgba(138,59,114,.35); --debt: #8A3B72; --bal-up: rgba(46,125,79,.5); --bal-down: rgba(178,58,46,.5); --gap-up: rgba(178,58,46,.35); --gap-down: rgba(46,125,79,.35);
     --cons: #2A6CA3; --inv: #B7801A; --gdp-l: #17202B; --tb-up: rgba(46,125,79,.45); --tb-down: rgba(178,58,46,.45); --ca: #17202B;
     --lic: rgba(183,128,26,.55); --lic-s: #B7801A; --con: rgba(31,122,116,.65); --con-s: #1F7A74;
@@ -33,6 +34,7 @@
       --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
       --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
       --hpi: #EE8E62; --ratio: #9AA6B4; --l200: #CF7FB5; --l100: #6FA8DC; --tax: #9AA6B4;
+      --gas95: #EE8E62; --dsl: #7FA8DA; --gold: #E0AE4A; --silver: #B8C1CC;
       --bpt: #5CC2B8; --bde: #9AA6B4; --spr: rgba(207,127,181,.35); --debt: #CF7FB5; --bal-up: rgba(108,194,148,.5); --bal-down: rgba(229,122,110,.5); --gap-up: rgba(229,122,110,.35); --gap-down: rgba(108,194,148,.35);
       --cons: #6FA8DC; --inv: #E0AE4A; --gdp-l: #E7ECF1; --tb-up: rgba(108,194,148,.45); --tb-down: rgba(229,122,110,.45); --ca: #E7ECF1;
       --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
@@ -48,6 +50,7 @@
     --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
     --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
     --hpi: #EE8E62; --ratio: #9AA6B4; --l200: #CF7FB5; --l100: #6FA8DC; --tax: #9AA6B4;
+    --gas95: #EE8E62; --dsl: #7FA8DA; --gold: #E0AE4A; --silver: #B8C1CC;
     --bpt: #5CC2B8; --bde: #9AA6B4; --spr: rgba(207,127,181,.35); --debt: #CF7FB5; --bal-up: rgba(108,194,148,.5); --bal-down: rgba(229,122,110,.5); --gap-up: rgba(229,122,110,.35); --gap-down: rgba(108,194,148,.35);
     --cons: #6FA8DC; --inv: #E0AE4A; --gdp-l: #E7ECF1; --tb-up: rgba(108,194,148,.45); --tb-down: rgba(229,122,110,.45); --ca: #E7ECF1;
     --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
@@ -75,6 +78,14 @@
   .dot.busy { background: var(--m6); animation: pulse 1s infinite alternate; }
   @keyframes pulse { to { opacity: .3; } }
 
+  .tabs { display: flex; flex-wrap: wrap; gap: .25rem; margin: -.5rem 0 1.5rem; border-bottom: 1px solid var(--line); }
+  .tabs button { appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-size: .92rem; font-weight: 600;
+    padding: .55rem .9rem; margin-bottom: -1px; cursor: pointer; }
+  .tabs button:hover { color: var(--ink); }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+  .tabs button:focus-visible { outline: 2px solid var(--m3); outline-offset: -2px; border-radius: 4px; }
+  .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .block[hidden] { display: none; }
   .block { margin-bottom: 2.5rem; }
   .block > h2 { font-size: 1.05rem; font-weight: 600; color: var(--muted); margin: 0 0 .8rem; letter-spacing: -0.01em; }
   .module + .module { margin-top: 2.5rem; }
@@ -157,19 +168,31 @@
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">A carregar…</span><button id="refresh">Atualizar tudo</button></div>
   </div>
 
-  <section class="block" aria-labelledby="b-eco">
-    <h2 id="b-eco">Económico</h2>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Separadores">
+    <button role="tab" data-tab="eco" aria-selected="true">Económico</button>
+    <button role="tab" data-tab="hab" aria-selected="false">Habitação</button>
+    <button role="tab" data-tab="op" aria-selected="false">Oferta e Procura</button>
+    <button role="tab" data-tab="mkt" aria-selected="false">Mercados</button>
+  </nav>
+
+  <section class="block" data-tab="eco" aria-labelledby="b-eco">
+    <h2 id="b-eco" class="visually-hidden">Económico</h2>
     <div id="modules"></div>
   </section>
 
-  <section class="block" aria-labelledby="b-hab">
-    <h2 id="b-hab">Habitação</h2>
+  <section class="block" data-tab="hab" aria-labelledby="b-hab" hidden>
+    <h2 id="b-hab" class="visually-hidden">Habitação</h2>
     <div id="modules-hab"></div>
   </section>
 
-  <section class="block" aria-labelledby="b-op">
-    <h2 id="b-op">Oferta e Procura</h2>
+  <section class="block" data-tab="op" aria-labelledby="b-op" hidden>
+    <h2 id="b-op" class="visually-hidden">Oferta e Procura</h2>
     <div id="modules-op"></div>
+  </section>
+
+  <section class="block" data-tab="mkt" aria-labelledby="b-mkt" hidden>
+    <h2 id="b-mkt" class="visually-hidden">Mercados</h2>
+    <div id="modules-mkt"></div>
   </section>
 </main>
 
@@ -1947,8 +1970,326 @@ const HPIPT = {
   yTick: v => sign(v) + fmt(Math.abs(v), 0) + "%",
 };
 
+/* =====================================================================
+   SEPARADOR MERCADOS — petróleo, gás, ouro, prata, bolsas, combustíveis, euro/dólar
+   ===================================================================== */
+const ghCache = {};
+async function ghJson(file, force) {
+  const c = ghCache[file];
+  if (!force && c && Date.now() - c.t < 60000) return c.p;
+  const p = (async () => {
+    for (const u of HOUSE.githubUrls(file)) {
+      try { const r = await fetchTimeout(u + "?t=" + Date.now(), 15000); if (r.ok) return await r.json(); } catch (e) {}
+    }
+    return null;
+  })();
+  ghCache[file] = { t: Date.now(), p };
+  return p;
+}
+async function mercados(force) {
+  const j = await ghJson("mercados.json", force);
+  if (!j || !j.series) throw ghMissing();
+  return j;
+}
+const serieMap = s => { const m = {}; if (s) s.datas.forEach((d, k) => { if (s.valores[k] != null) m[d] = s.valores[k]; }); return m; };
+// valor numa data (último conhecido até essa data)
+function valorEm(dates, vals, alvo) { let r = null; for (let k = 0; k < dates.length && dates[k] <= alvo; k++) if (vals[k] != null) r = vals[k]; return r; }
+function diasAntes(d, n) { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - n); return t.toISOString().slice(0, 10); }
+function varDias(dates, vals, n) { const i = lastIdx(vals); if (i < 0) return null; const b = valorEm(dates, vals, diasAntes(dates[i], n)); return b ? (vals[i] / b - 1) * 100 : null; }
+function varAno(dates, vals) { const i = lastIdx(vals); if (i < 0) return null; const b = valorEm(dates, vals, (+dates[i].slice(0, 4) - 1) + "-12-31"); return b ? (vals[i] / b - 1) * 100 : null; }
+function perto52(dates, vals) { const i = lastIdx(vals); if (i < 0) return null; const ini = diasAntes(dates[i], 365); let mx = -Infinity; for (let k = 0; k <= i; k++) if (dates[k] >= ini && vals[k] != null) mx = Math.max(mx, vals[k]); return vals[i] / mx; }
+const pctTxt = (x, d = 1) => x == null ? "—" : sign(x) + fmt(Math.abs(x), d) + "%";
+const dLabel = d => { const [y, m, dd] = d.split("-"); return (+dd) + " " + MESES[+m - 1] + " " + y.slice(2); };
+const mktNote = j => j?.atualizado ? ` Dados copiados a ${timeLabel(Date.parse(j.atualizado))}.` : "";
+
+/* ---------- Combustíveis ---------- */
+const FUEL = {
+  byDate: true,
+  key: "fuel", container: "modules-mkt", sourceName: "GitHub",
+  title: "Combustíveis em Portugal",
+  defaultYears: 3, perYear: 52,
+  source: `Preço médio de venda ao público em Portugal, com impostos, em €/litro, por semana (segunda-feira).
+    Fonte oficial: Comissão Europeia, <a href="https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en" target="_blank" rel="noopener">Weekly Oil Bulletin</a>, copiado pela tarefa do GitHub.`,
+  series: [
+    { id: "GAS", label: "Gasolina 95", short: "Gasolina", color: "--gas95" },
+    { id: "DSL", label: "Gasóleo",     short: "Gasóleo",  color: "--dsl" },
+  ],
+  maxAge: 3 * 3600e3,
+  async load(prev, force) {
+    const j = await mercados(force), c = j.combustiveis;
+    if (!c?.gasolina95) throw new Error("os preços dos combustíveis ainda não foram copiados");
+    const G = serieMap(c.gasolina95), D = serieMap(c.gasoleo);
+    const periods = [...new Set([...Object.keys(G), ...Object.keys(D)])].sort();
+    const br = serieMap(j.series.brent), fx = serieMap(j.series.eurusd);
+    const bd = Object.keys(br).filter(d => fx[d]).sort();
+    return { periods, values: { GAS: periods.map(d => G[d] ?? null), DSL: periods.map(d => D[d] ?? null) },
+             brentEur: { dates: bd, vals: bd.map(d => br[d] / fx[d]) }, note: mktNote(j), errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const G = d.values.GAS, D = d.values.DSL, i = lastIdx(G);
+    if (i < 4) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const g4 = (G[i] / G[i - 4] - 1) * 100;
+    let text, color;
+    if (g4 >= 2) { text = "Os combustíveis estão a ficar mais caros"; color = "var(--up)"; }
+    else if (g4 <= -2) { text = "Os combustíveis estão a ficar mais baratos"; color = "var(--down)"; }
+    else { text = "O preço dos combustíveis está estável"; color = "var(--flat)"; }
+    const cts = x => (x >= 0 ? "mais " : "menos ") + fmt(Math.abs(x) * 100, 1) + " cêntimos";
+    let msg = `Na semana de ${dayLabel(d.periods[i])}, a gasolina 95 custava em média ${fmt(G[i], 3)} €/litro e o gasóleo ${fmt(D[i], 3)} €/litro.`;
+    msg += ` Face a há 4 semanas, a gasolina está ${cts(G[i] - G[i - 4])} e o gasóleo ${cts(D[i] - D[i - 4])} por litro.`;
+    const ya = valorEm(d.periods, G, diasAntes(d.periods[i], 364));
+    if (ya) msg += ` Encher um depósito de 50 litros de gasolina custa cerca de ${fmt(Math.round(G[i] * 50), 0)} €, ${Math.abs(G[i] - ya) * 50 < 0.5 ? "o mesmo" : fmt(Math.round(Math.abs(G[i] - ya) * 50), 0) + " € " + (G[i] > ya ? "mais" : "menos")} do que há um ano.`;
+    const b = d.brentEur, bm = b && varDias(b.dates, b.vals, 30);
+    if (bm != null) msg += ` O petróleo, em euros, ${Math.abs(bm) < 0.5 ? "manteve-se praticamente igual" : (bm >= 0 ? "subiu " : "desceu ") + fmt(Math.abs(bm), 0) + "%"} no último mês; costuma chegar às bombas com 2 a 3 semanas de atraso.`;
+    return { text, color, msg: msg + (d.note || "") };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a), ya = i >= 0 ? valorEm(d.periods, a, diasAntes(d.periods[i], 364)) : null;
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + dLabel(d.periods[i]) : ""), value: i >= 0 ? a[i] : null, d: 3, unit: " €/L",
+               deltas: deltaHTML(a[i] != null && a[i - 1] != null ? (a[i] - a[i - 1]) * 100 : null, 0, "cênt. vs semana anterior", 1, false, "") +
+                       deltaHTML(ya ? (a[i] / ya - 1) * 100 : null, 0, "vs há um ano", 1, false, "%") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id],
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true }));
+  },
+  label: dLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 3)} €/L`,
+  yTick: v => fmt(v, 2) + " €",
+};
+
+/* ---------- Petróleo e gás ---------- */
+const OIL = {
+  byDate: true,
+  key: "oil", container: "modules-mkt", sourceName: "GitHub",
+  title: "Petróleo e gás",
+  defaultYears: 3, perYear: 252,
+  source: `Petróleo Brent (referência europeia) por barril, em euros e em dólares; gás natural europeu (TTF, Países Baixos) em €/MWh, no eixo da direita.
+    Preços de fecho diários de contratos futuros. Fonte: Yahoo Finance (dados de mercado, não oficiais), copiados pela tarefa do GitHub.`,
+  series: [
+    { id: "BEUR", label: "Brent em euros",   short: "Brent €",  color: "--debt" },
+    { id: "BUSD", label: "Brent em dólares", short: "Brent $",  color: "--ratio", dashed: true },
+    { id: "TTF",  label: "Gás natural (TTF)", short: "Gás TTF", color: "--maia" },
+  ],
+  maxAge: 3 * 3600e3,
+  async load(prev, force) {
+    const j = await mercados(force), br = serieMap(j.series.brent), fx = serieMap(j.series.eurusd), gs = serieMap(j.series.gas);
+    const periods = [...new Set([...Object.keys(br), ...Object.keys(gs)])].sort();
+    if (!periods.length) throw new Error("sem dados de petróleo e gás");
+    let lastFx = null;
+    const BEUR = periods.map(d => { if (fx[d]) lastFx = fx[d]; return br[d] != null && lastFx ? br[d] / lastFx : null; });
+    return { periods, values: { BEUR, BUSD: periods.map(d => br[d] ?? null), TTF: periods.map(d => gs[d] ?? null) }, note: mktNote(j), errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const P = d.periods, E = d.values.BEUR, U = d.values.BUSD, T = d.values.TTF, i = lastIdx(E);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const m1 = varDias(P, E, 30), y1 = varDias(P, E, 365);
+    let text, color;
+    if (m1 != null && m1 >= 5) { text = "O petróleo está a subir"; color = "var(--up)"; }
+    else if (m1 != null && m1 <= -5) { text = "O petróleo está a descer"; color = "var(--down)"; }
+    else { text = "O preço do petróleo está estável"; color = "var(--flat)"; }
+    let msg = `No fecho de ${dayLabel(P[i])}, o barril de Brent valia ${fmt(U[i], 2)} dólares, ou ${fmt(E[i], 2)} euros: ${pctTxt(m1, 0)} num mês e ${pctTxt(y1, 0)} num ano (em euros).`;
+    const iT = lastIdx(T);
+    if (iT >= 0) msg += ` O gás natural europeu estava em ${fmt(T[iT], 1)} €/MWh (${pctTxt(varDias(P, T, 30), 0)} num mês, ${pctTxt(varDias(P, T, 365), 0)} num ano); é o que mais pesa no preço da eletricidade e do gás em casa.`;
+    return { text, color, msg: msg + (d.note || "") };
+  },
+  rates(d) {
+    const P = d.periods;
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + dLabel(P[i]) : ""), value: i >= 0 ? a[i] : null, d: s.id === "TTF" ? 1 : 2,
+               unit: s.id === "TTF" ? " €/MWh" : s.id === "BEUR" ? " €" : " $",
+               deltas: deltaHTML(varDias(P, a, 30), 0, "num mês", 1, false, "%") + deltaHTML(varDias(P, a, 365), 0, "num ano", 1, false, "%") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id], yAxisID: s.id === "TTF" ? "y2" : "y",
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: s.dashed ? 1.5 : 2.25, borderDash: s.dashed ? [4, 3] : [], pointRadius: 0, pointHoverRadius: 4, tension: 0.1, spanGaps: true }));
+  },
+  y2: { tick: v => fmt(v, 0) + " €/MWh" },
+  label: dLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, s.id === "TTF" ? 1 : 2)}${s.id === "TTF" ? " €/MWh" : s.id === "BEUR" ? " €" : " $"}`,
+  yTick: v => fmt(v, 0),
+};
+
+/* ---------- Ouro e prata ---------- */
+const METALS = {
+  byDate: true,
+  key: "metals", container: "modules-mkt", sourceName: "GitHub",
+  title: "Ouro e prata",
+  defaultYears: 5, perYear: 252,
+  source: `Preço por onça (31,1 gramas), convertido em euros com o câmbio do dia. O ouro no eixo da esquerda, a prata no da direita.
+    Preços de fecho diários de contratos futuros. Fonte: Yahoo Finance (dados de mercado, não oficiais), copiados pela tarefa do GitHub.`,
+  series: [
+    { id: "GOLD",   label: "Ouro",  short: "Ouro",  color: "--gold" },
+    { id: "SILVER", label: "Prata", short: "Prata", color: "--silver" },
+  ],
+  maxAge: 3 * 3600e3,
+  async load(prev, force) {
+    const j = await mercados(force), g = serieMap(j.series.ouro), s = serieMap(j.series.prata), fx = serieMap(j.series.eurusd);
+    const periods = [...new Set([...Object.keys(g), ...Object.keys(s)])].sort();
+    if (!periods.length) throw new Error("sem dados de ouro e prata");
+    let f = null; const fxs = periods.map(d => { if (fx[d]) f = fx[d]; return f; });
+    return { periods, usd: { GOLD: periods.map(d => g[d] ?? null), SILVER: periods.map(d => s[d] ?? null) },
+             values: { GOLD: periods.map((d, k) => g[d] != null && fxs[k] ? g[d] / fxs[k] : null), SILVER: periods.map((d, k) => s[d] != null && fxs[k] ? s[d] / fxs[k] : null) },
+             note: mktNote(j), errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const P = d.periods, G = d.values.GOLD, S = d.values.SILVER, i = lastIdx(G);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const near = perto52(P, G), y1 = varDias(P, G, 365);
+    let text, color;
+    if (near != null && near >= 0.98) { text = "O ouro está em máximos"; color = "var(--up)"; }
+    else if (y1 != null && y1 >= 10) { text = "O ouro está a valorizar"; color = "var(--up)"; }
+    else if (y1 != null && y1 <= -10) { text = "O ouro está a desvalorizar"; color = "var(--down)"; }
+    else { text = "O preço do ouro está estável"; color = "var(--flat)"; }
+    let msg = `No fecho de ${dayLabel(P[i])}, uma onça de ouro valia ${fmt(Math.round(G[i]), 0)} € (${fmt(Math.round(d.usd.GOLD[i]), 0)} dólares): ${pctTxt(varAno(P, G), 0)} desde o início do ano e ${pctTxt(y1, 0)} num ano.`;
+    msg += ` Um grama de ouro vale cerca de ${fmt(G[i] / 31.1035, 0)} €.`;
+    const iS = lastIdx(S);
+    if (iS >= 0) msg += ` A prata estava em ${fmt(S[iS], 2)} € por onça (${pctTxt(varAno(P, S), 0)} desde o início do ano).`;
+    msg += " O ouro costuma subir quando há medo nos mercados, inflação alta ou juros a descer.";
+    return { text, color, msg: msg + (d.note || "") };
+  },
+  rates(d) {
+    const P = d.periods;
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + " (onça)" + (i >= 0 ? " · " + dLabel(P[i]) : ""), value: i >= 0 ? a[i] : null, d: s.id === "GOLD" ? 0 : 2, unit: " €",
+               deltas: deltaHTML(varAno(P, a), 0, "desde o início do ano", 1, true, "%") + deltaHTML(varDias(P, a, 365), 0, "num ano", 1, true, "%") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id], yAxisID: s.id === "SILVER" ? "y2" : "y",
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: 2.25, pointRadius: 0, pointHoverRadius: 4, tension: 0.1, spanGaps: true }));
+  },
+  y2: { tick: v => fmt(v, 0) + " €" },
+  label: dLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, s.id === "GOLD" ? 0 : 2)} € por onça`,
+  yTick: v => fmt(v, 0) + " €",
+};
+
+/* ---------- Euro vs dólar (BCE) ---------- */
+const FX = {
+  byDate: true,
+  key: "fx", container: "modules-mkt",
+  title: "Euro vs dólar",
+  defaultYears: 3, perYear: 256,
+  source: `Taxa de câmbio de referência do BCE: quantos dólares se compram com 1 euro, em cada dia útil.
+    Como o petróleo, o gás e o ouro se pagam em dólares, um euro mais forte torna-os mais baratos para nós; um euro mais fraco torna-os mais caros.
+    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/EXR" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [{ id: "USD", label: "Dólares por euro", short: "1 € =", color: "--m3" }],
+  async load() {
+    const rows = await getCSV(ECB + "EXR/D.USD.EUR.SP00.A?format=csvdata&startPeriod=2008-01-01");
+    const m = {}; for (const r of rows) if (r.v != null) m[r.t] = r.v;
+    const periods = Object.keys(m).sort();
+    return { periods, values: { USD: periods.map(d => m[d]) }, errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const P = d.periods, U = d.values.USD, i = lastIdx(U);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const m3 = varDias(P, U, 91), y1 = varDias(P, U, 365);
+    let text, color;
+    if (m3 >= 3) { text = "O euro está a valorizar face ao dólar"; color = "var(--down)"; }
+    else if (m3 <= -3) { text = "O euro está a desvalorizar face ao dólar"; color = "var(--up)"; }
+    else { text = "O euro está estável face ao dólar"; color = "var(--flat)"; }
+    let msg = `Em ${dayLabel(P[i])}, 1 euro valia ${fmt(U[i], 4)} dólares: ${pctTxt(m3)} em três meses e ${pctTxt(y1)} num ano.`;
+    msg += m3 >= 3 ? " Um euro mais forte embaratece o petróleo, o gás e as importações pagas em dólares, e ajuda a travar a inflação; em contrapartida, as exportações para fora da zona euro ficam mais caras."
+         : m3 <= -3 ? " Um euro mais fraco encarece o petróleo, o gás e as importações pagas em dólares; em contrapartida, torna as exportações e o turismo mais competitivos."
+         : " Sem grandes mudanças, o câmbio não está a pesar nos preços do petróleo e das importações.";
+    return { text, color, msg };
+  },
+  rates(d) {
+    const P = d.periods, U = d.values.USD, i = lastIdx(U);
+    return [{ id: "USD", name: "1 euro em dólares · " + (i >= 0 ? dLabel(P[i]) : "—"), value: i >= 0 ? U[i] : null, d: 4, unit: " $",
+              deltas: deltaHTML(varDias(P, U, 91), 0, "em 3 meses", 1, true, "%") + deltaHTML(varDias(P, U, 365), 0, "num ano", 1, true, "%") }];
+  },
+  datasets(d, start, end, visible) {
+    return [{ type: "line", label: "Dólares por euro", data: d.values.USD.slice(start, end), hidden: !visible.USD, borderColor: css("--m3"), backgroundColor: css("--m3"), borderWidth: 2.25, pointRadius: 0, pointHoverRadius: 4, tension: 0.1 }];
+  },
+  label: dLabel,
+  tooltip: (s, v) => ` 1 € = ${fmt(v, 4)} $`,
+  yTick: v => fmt(v, 2) + " $",
+};
+
+/* ---------- Bolsas ---------- */
+const STOCKS = {
+  byDate: true,
+  key: "stocks", container: "modules-mkt", sourceName: "GitHub",
+  title: "Bolsas",
+  defaultYears: 1, perYear: 252, rateCols: 3,
+  source: `Índices das principais bolsas, todos a começar em 100 no início do período escolhido, para comparar quem ganhou mais. Os valores não incluem dividendos.
+    MSCI World: ações de cerca de 1 400 grandes empresas de países desenvolvidos (através de um fundo cotado, em dólares).
+    Preços de fecho diários. Fonte: Yahoo Finance (dados de mercado, não oficiais), copiados pela tarefa do GitHub. Isto não é uma recomendação de investimento.`,
+  series: [
+    { id: "psi",     label: "PSI (Lisboa)",    short: "PSI",          color: "--lis" },
+    { id: "stoxx50", label: "Euro Stoxx 50",    short: "Euro Stoxx 50", color: "--opo" },
+    { id: "sp500",   label: "S&P 500 (EUA)",    short: "S&P 500",      color: "--mat" },
+    { id: "nasdaq",  label: "Nasdaq (EUA)",     short: "Nasdaq",       color: "--val" },
+    { id: "mundo",   label: "MSCI World",       short: "MSCI World",   color: "--maia" },
+  ],
+  maxAge: 3 * 3600e3,
+  async load(prev, force) {
+    const j = await mercados(force), maps = {};
+    for (const s of this.series) maps[s.id] = serieMap(j.series[s.id]);
+    const periods = [...new Set(Object.values(maps).flatMap(Object.keys))].sort();
+    if (!periods.length) throw new Error("sem dados das bolsas");
+    const values = {};
+    for (const s of this.series) { let last = null; values[s.id] = periods.map(d => { if (maps[s.id][d] != null) last = maps[s.id][d]; return maps[s.id][d] != null ? maps[s.id][d] : (last != null ? null : null); }); }
+    return { periods, values, note: mktNote(j), errors: [], fetchedAt: Date.now() };
+  },
+  chartData(d) {
+    const st = state[this.key], n = d.periods.length;
+    let start = 0;
+    if (st.years && n) { const cut = diasAntes(d.periods[n - 1], Math.round(st.years * 365.25)); start = Math.max(0, d.periods.findIndex(p => p >= cut)); }
+    const values = {};
+    for (const s of this.series) {
+      const a = d.values[s.id]; let b = null;
+      for (let k = start; k < n && b == null; k++) if (a[k] != null) b = a[k];
+      values[s.id] = a.map(v => v != null && b ? v / b * 100 : null);
+    }
+    return { periods: d.periods, values };
+  },
+  verdict(d) {
+    const P = d.periods, info = this.series.map(s => ({ s, ytd: varAno(P, d.values[s.id]), m1: varDias(P, d.values[s.id], 30), near: perto52(P, d.values[s.id]) })).filter(x => x.m1 != null);
+    if (!info.length) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const avg = info.reduce((a, x) => a + x.m1, 0) / info.length, highs = info.filter(x => x.near >= 0.97).length;
+    let text, color;
+    if (avg <= -5) { text = "As bolsas estão a cair"; color = "var(--up)"; }
+    else if (highs >= 3) { text = "As bolsas estão perto de máximos"; color = "var(--down)"; }
+    else if (avg >= 3) { text = "As bolsas estão a subir"; color = "var(--down)"; }
+    else if (avg <= -2) { text = "As bolsas estão a recuar"; color = "var(--flat)"; }
+    else { text = "As bolsas estão estáveis"; color = "var(--flat)"; }
+    const withY = info.filter(x => x.ytd != null).sort((a, b) => b.ytd - a.ytd);
+    let msg = "";
+    if (withY.length) {
+      const best = withY[0], worst = withY[withY.length - 1];
+      msg += `Desde o início do ano, a bolsa que mais ${best.ytd >= 0 ? "ganhou" : "perdeu"} foi ${best.s.label} (${pctTxt(best.ytd)}) e a que ${worst.ytd >= 0 ? "menos ganhou" : "mais perdeu"} foi ${worst.s.label} (${pctTxt(worst.ytd)}).`;
+    }
+    const psi = info.find(x => x.s.id === "psi");
+    if (psi) msg += ` A bolsa de Lisboa (PSI) ${psi.m1 >= 0 ? "subiu" : "desceu"} ${fmt(Math.abs(psi.m1), 1)}% no último mês${psi.ytd != null ? ` e está ${pctTxt(psi.ytd)} no ano` : ""}.`;
+    if (highs) msg += ` ${highs === 1 ? "Um dos índices está" : highs + " dos " + info.length + " índices estão"} a menos de 3% do máximo dos últimos 12 meses.`;
+    return { text, color, msg: msg + (d.note || "") };
+  },
+  rates(d) {
+    const P = d.periods;
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + " · no ano", value: varAno(P, a), d: 1, unit: "%", signed: true,
+               deltas: deltaHTML(varDias(P, a, 30), 0, "num mês", 1, true, "%") + deltaHTML(varDias(P, a, 365), 0, "num ano", 1, true, "%") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id],
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.1, spanGaps: true }));
+  },
+  label: dLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 1)} (${sign(v - 100)}${fmt(Math.abs(v - 100), 1)}%)`,
+  yTick: v => fmt(v, 0),
+};
+
 /* ---------- ordem dos gráficos ---------- */
-const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR];
+const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS];
 
 /* ---------- construção e desenho genéricos ---------- */
 const state = {};
@@ -2041,7 +2382,9 @@ function render(m) {
     const perYear = m.chartPerYear || m.perYear, labelFn = m.chartLabel || m.label;
     let nowIdx = -1;
     for (const id in cd.values) nowIdx = Math.max(nowIdx, lastIdx(cd.values[id]));
-    const end = nowIdx + 1, start = st.years ? Math.max(0, end - st.years * perYear) : 0;
+    const end = nowIdx + 1;
+    let start = st.years ? Math.max(0, end - st.years * perYear) : 0;
+    if (st.years && m.byDate && end > 0) { const cut = diasAntes(cd.periods[end - 1], Math.round(st.years * 365.25)); start = cd.periods.findIndex(p => p >= cut); if (start < 0) start = 0; }
     const grid = css("--line"), muted = css("--muted"), ink = css("--ink"), surface = css("--surface");
     st.els.msg.hidden = true;
     if (st.chart) st.chart.destroy();
@@ -2086,7 +2429,7 @@ async function loadModule(m, force = true) {
   const rb = st.els.refresh, rl = rb && rb.querySelector(".rl");
   if (rb) { rb.disabled = true; rb.classList.add("busy"); rl.textContent = "A atualizar…"; }
   try {
-    st.data = await m.load(st.data);
+    st.data = await m.load(st.data, force);
     try { localStorage.setItem("ind-" + m.key, JSON.stringify(st.data)); } catch (e) {}
     st.failed = false;
     st.els.err.hidden = !st.data.errors.length;
@@ -2124,6 +2467,18 @@ async function loadAll(force = false) {
 }
 
 $("refresh").onclick = () => loadAll(true);
+// separadores
+function showTab(t) {
+  const ok = [...document.querySelectorAll("#tabs button")].some(b => b.dataset.tab === t);
+  if (!ok) t = "eco";
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+  document.querySelectorAll("section.block[data-tab]").forEach(sec => { sec.hidden = sec.dataset.tab !== t; });
+  try { localStorage.setItem("tab", t); } catch (e) {}
+  if (location.hash.slice(1) !== t) history.replaceState(null, "", "#" + t);
+  MODULES.filter(m => (m.container || "modules") === document.querySelector(`section.block[data-tab="${t}"] > div[id]`)?.id && !state[m.key].els.module.classList.contains("folded")).forEach(render);
+}
+document.getElementById("tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
+window.addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && Date.now() - lastLoad > 3600e3) loadAll();
@@ -2132,6 +2487,7 @@ setInterval(loadAll, 6 * 3600e3);
 
 build();
 renderAll();
+showTab(location.hash.slice(1) || (() => { try { return localStorage.getItem("tab"); } catch (e) { return null; } })() || "eco");
 loadAll();
 </script>
 </body>

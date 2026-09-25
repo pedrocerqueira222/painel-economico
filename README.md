@@ -4,6 +4,8 @@ Painel pessoal com os principais indicadores da economia e da habitação em Por
 
 **Abrir o painel:** https://pedrocerqueira222.github.io/painel-economico/
 
+A página tem quatro separadores: **Económico**, **Habitação**, **Oferta e Procura** e **Mercados**. A página lembra-se do último separador aberto, e o endereço muda para cada um (por exemplo `…/painel-economico/#mkt`), por isso dá para guardar um separador nos favoritos.
+
 Cada gráfico abre com um clique no título e mostra um comentário automático, que é escrito a partir dos dados mais recentes. Exemplos: *"O dinheiro está a ficar mais caro"*, *"O poder de compra está a aumentar"*, *"A procura de casas está muito forte"*.
 
 ---
@@ -43,6 +45,16 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 | Procura | Quão forte está a procura? | Número de casas vendidas e crédito à habitação novo concedido pelos bancos |
 | Pessoas que chegam a Portugal | Quantas pessoas entram e saem todos os anos? | Imigrantes, emigrantes e saldo migratório |
 
+### Mercados
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
+| Combustíveis em Portugal | Quanto custa abastecer e para onde vai o preço? | Gasolina 95 e gasóleo, €/litro com impostos, por semana |
+| Petróleo e gás | O que está a acontecer às matérias-primas de energia? | Brent em € e em $, gás natural europeu (TTF) |
+| Ouro e prata | O "porto de abrigo" está a subir? | Preço por onça em euros |
+| Euro vs dólar | O euro está a ficar mais forte ou mais fraco? | Dólares por euro (câmbio de referência do BCE) |
+| Bolsas | Como estão os mercados acionistas? | PSI, Euro Stoxx 50, S&P 500, Nasdaq e MSCI World, todos a começar em 100 |
+
 ---
 
 ## Como funciona
@@ -60,6 +72,7 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 ```
 
 - **Dados do BCE** (Euribor, taxas do BCE, inflação, PIB, desemprego, salários, consumo, investimento, comércio externo, balança corrente, juros e dívida pública, índice de preços da habitação, crédito e respetivos juros): a página vai buscá-los diretamente ao BCE sempre que é aberta.
+- **Dados de mercado** (petróleo, gás, ouro, prata, bolsas) e **combustíveis**: vêm do Yahoo Finance (ou Stooq, como alternativa) e do boletim semanal da Comissão Europeia. A tarefa do GitHub vai buscá-los **em todas as corridas, de hora a hora**, e guarda os fechos dos dias já terminados em `dados/mercados.json`.
 - **Dados do INE e do Eurostat** (preços e rendas por concelho, construção, vendas, migração): o INE não deixa uma página no browser ler os dados diretamente, e é lento a responder. Por isso, uma tarefa automática do GitHub tenta ir buscá-los de hora a hora, até o INE responder. Quando consegue, não volta a pedir dados ao INE nas 20 horas seguintes, para não o sobrecarregar. Os dados ficam guardados na pasta `dados/`. A página lê esses ficheiros, que carregam logo.
 
 Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servidor.
@@ -80,6 +93,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
     ├── construcao.json                 # fogos licenciados e concluídos
     ├── transacoes.json                 # casas vendidas
     ├── migracao.json                   # imigrantes e emigrantes
+    ├── mercados.json                   # petróleo, gás, ouro, prata, bolsas, câmbio e combustíveis
     ├── estado.json                     # quando foi a última ida ao INE com sucesso
     └── verificado.txt                  # registo mensal (mantém a tarefa ativa)
 ```
@@ -93,6 +107,8 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
 | [BCE Data Portal](https://data.ecb.europa.eu) | Euribor e taxas oficiais (FM), inflação (HICP), contas nacionais (MNA), desemprego (LFSI), preços da habitação (RESR), crédito novo (MIR), balança de pagamentos (BP6), juros de longo prazo (IRS), finanças públicas (GFS) |
 | [INE](https://www.ine.pt) | Preço mediano das casas vendidas por concelho (0012234), rendas de novos contratos, fogos licenciados e concluídos (0012778), vendas de alojamentos |
 | [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz) e emigração (migr_emi1ctz) |
+| [Comissão Europeia – Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en) | Preço médio da gasolina 95 e do gasóleo em Portugal, com impostos |
+| Yahoo Finance / Stooq | Brent, gás TTF, ouro, prata, PSI, Euro Stoxx 50, S&P 500, Nasdaq, MSCI World (dados de mercado, **não oficiais**) |
 
 Cada gráfico tem por baixo uma nota com a definição exata dos dados e a sua origem.
 
@@ -139,5 +155,6 @@ Entrar na pasta certa **antes** de carregar em *Add file → Upload files*. Evit
 - O "índice de salários" é a remuneração média por trabalhador das contas nacionais: inclui as contribuições do empregador e não é exatamente o salário líquido.
 - A prestação do crédito é uma estimativa. Não inclui seguros, comissões nem imposto do selo.
 - A comparação entre construção e população usa uma média de 2,5 pessoas por casa.
+- Os dados de mercado (Yahoo Finance / Stooq) não são estatísticas oficiais: são preços de fecho do dia útil anterior, sem tempo real, e as bolsas não incluem dividendos. Nada no painel é uma recomendação de investimento.
 - As previsões do preço das casas (gráfico "Valor das casas em Portugal") são os únicos valores fixos do painel: têm de ser atualizadas à mão quando sai um relatório novo. A página avisa quando já têm vários meses.
 - A "sobrevalorização" das casas é uma estimativa simples (tendência linear dos preços reais) e não o modelo oficial do Banco de Portugal.
