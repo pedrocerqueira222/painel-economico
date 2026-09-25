@@ -11,6 +11,7 @@ Vai buscar ao INE, para Portugal e 5 concelhos:
     (boletim semanal da Comissão Europeia) -> dados/mercados.json  [a cada corrida, sem a regra das 20 h]
   - previsões do FMI para Portugal (World Economic Outlook) -> dados/previsoes.json
   - inflação medida pelo IPC (BPstat, Banco de Portugal) -> dados/ipc.json  [a cada corrida]
+  - taxa de juro da Fed, EUA (FRED) -> dados/fed.json  [a cada corrida]
 Corre todos os dias no GitHub (ver .github/workflows).
 
 Só usa a biblioteca padrão do Python: não é preciso instalar nada.
@@ -1041,6 +1042,61 @@ def atualizar_ipc(hoje: datetime) -> bool:
                                               "serie": IPC_SERIE, "frequencia": "mensal"}, hoje)
 
 
+# ================================================================ taxa da Fed (FRED, Reserva Federal de St. Louis)
+FED = os.path.join(PASTA, "fed.json")
+FRED_URL = os.environ.get("FRED_URL", "https://fred.stlouisfed.org/graph/fredgraph.csv?id=")
+
+
+def fred(serie: str) -> dict:
+    req = urllib.request.Request(FRED_URL + serie, headers={**CABECALHOS, "Accept": "text/csv"})
+    out = {}
+    for linha in ler_url(req, limite=60).decode("utf-8").strip().splitlines()[1:]:
+        d, _, v = linha.partition(",")
+        try:
+            out[d.strip()] = float(v)
+        except ValueError:
+            pass
+    return out
+
+
+def atualizar_fed(hoje: datetime) -> bool:
+    """Guarda só os dias em que o intervalo-alvo da Fed mudou (antes de dez/2008 havia um alvo único)."""
+    try:
+        sup, inf = fred("DFEDTARU"), fred("DFEDTARL")
+    except Exception as e:
+        print(f"Fed (FRED): falhou ({e})", file=sys.stderr)
+        return False
+    try:
+        antigo = fred("DFEDTAR")
+    except Exception:
+        antigo = {}
+    datas, s_, i_ = [], [], []
+    for d in sorted(set(antigo) | set(sup)):
+        if d < "1999-01-01":
+            continue
+        h = sup.get(d, antigo.get(d) if d not in inf else None)
+        l = inf.get(d, antigo.get(d) if d not in sup else None)
+        if h is None or l is None:
+            continue
+        if not datas or s_[-1] != h or i_[-1] != l:
+            datas.append(d); s_.append(h); i_.append(l)
+    if not datas:
+        print("Fed (FRED): sem valores.", file=sys.stderr)
+        return False
+    novo = {"fonte": "FRED (Reserva Federal de St. Louis): DFEDTARU, DFEDTARL e DFEDTAR",
+            "mudancas": {"datas": datas, "superior": s_, "inferior": i_}}
+    velho = ler(FED)
+    if velho.get("mudancas") == novo["mudancas"]:
+        print("fed.json: sem alterações.")
+        return True
+    novo["atualizado"] = hoje.strftime("%Y-%m-%dT%H:%M:%SZ")
+    os.makedirs(PASTA, exist_ok=True)
+    with open(FED, "w", encoding="utf-8") as f:
+        json.dump(novo, f, ensure_ascii=False, indent=1)
+    print(f"fed.json: gravado, {len(datas)} mudanças, atual {i_[-1]}–{s_[-1]}% desde {datas[-1]}.")
+    return True
+
+
 def ine_acessivel() -> bool:
     # a tarefa corre de hora a hora: basta insistir um pouco em cada corrida
     for n in range(6):
@@ -1082,6 +1138,10 @@ def main() -> int:
         ok_mercados = atualizar_ipc(hoje) or ok_mercados
     except Exception as e:
         print(f"IPC: erro inesperado ({e})", file=sys.stderr)
+    try:  # a taxa da Fed vem do FRED: atualiza em todas as corridas
+        ok_mercados = atualizar_fed(hoje) or ok_mercados
+    except Exception as e:
+        print(f"Fed: erro inesperado ({e})", file=sys.stderr)
     ultima = estado.get("ultima_ida_ao_ine")
     if ultima and not forcar:
         try:
