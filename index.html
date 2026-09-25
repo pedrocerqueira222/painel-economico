@@ -15,6 +15,7 @@
     --gdp: #3A6EA5; --gdp-up: rgba(58,110,165,.45); --gdp-down: rgba(178,58,46,.45); --une: #7A4FB0;
     --pt: #17202B; --lis: #2A6CA3; --opo: #B7801A; --maia: #1F7A74; --val: #8A3B72; --mat: #C0562B;
     --hpi: #C0562B; --ratio: #5B6675; --l200: #8A3B72; --l100: #2A6CA3; --tax: #5B6675;
+    --bpt: #1F7A74; --bde: #5B6675; --spr: rgba(138,59,114,.35); --debt: #8A3B72; --bal-up: rgba(46,125,79,.5); --bal-down: rgba(178,58,46,.5); --gap-up: rgba(178,58,46,.35); --gap-down: rgba(46,125,79,.35);
     --cons: #2A6CA3; --inv: #B7801A; --gdp-l: #17202B; --tb-up: rgba(46,125,79,.45); --tb-down: rgba(178,58,46,.45); --ca: #17202B;
     --lic: rgba(183,128,26,.55); --lic-s: #B7801A; --con: rgba(31,122,116,.65); --con-s: #1F7A74;
     --sales: rgba(58,110,165,.5); --sales-s: #3A6EA5; --cred: #8A3B72;
@@ -32,6 +33,7 @@
       --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
       --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
       --hpi: #EE8E62; --ratio: #9AA6B4; --l200: #CF7FB5; --l100: #6FA8DC; --tax: #9AA6B4;
+      --bpt: #5CC2B8; --bde: #9AA6B4; --spr: rgba(207,127,181,.35); --debt: #CF7FB5; --bal-up: rgba(108,194,148,.5); --bal-down: rgba(229,122,110,.5); --gap-up: rgba(229,122,110,.35); --gap-down: rgba(108,194,148,.35);
       --cons: #6FA8DC; --inv: #E0AE4A; --gdp-l: #E7ECF1; --tb-up: rgba(108,194,148,.45); --tb-down: rgba(229,122,110,.45); --ca: #E7ECF1;
       --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
       --sales: rgba(127,168,218,.5); --sales-s: #7FA8DA; --cred: #CF7FB5;
@@ -46,6 +48,7 @@
     --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
     --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
     --hpi: #EE8E62; --ratio: #9AA6B4; --l200: #CF7FB5; --l100: #6FA8DC; --tax: #9AA6B4;
+    --bpt: #5CC2B8; --bde: #9AA6B4; --spr: rgba(207,127,181,.35); --debt: #CF7FB5; --bal-up: rgba(108,194,148,.5); --bal-down: rgba(229,122,110,.5); --gap-up: rgba(229,122,110,.35); --gap-down: rgba(108,194,148,.35);
     --cons: #6FA8DC; --inv: #E0AE4A; --gdp-l: #E7ECF1; --tb-up: rgba(108,194,148,.45); --tb-down: rgba(229,122,110,.45); --ca: #E7ECF1;
     --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
     --sales: rgba(127,168,218,.5); --sales-s: #7FA8DA; --cred: #CF7FB5;
@@ -1489,8 +1492,461 @@ const TRADE = {
   yTick: v => fmt(v, 0) + "%",
 };
 
+/* =====================================================================
+   MÓDULO — Juros da dívida pública: Portugal vs Alemanha (BCE)
+   ===================================================================== */
+const BONDS = {
+  key: "bonds",
+  title: "Juros da dívida: Portugal vs Alemanha",
+  defaultYears: 10, perYear: 12,
+  source: `Taxa de juro das obrigações do Tesouro a 10 anos (média mensal, critério de convergência de Maastricht). A diferença para a Alemanha, o "spread", mede quanto mais os investidores exigem para emprestar a Portugal: quanto menor, maior a confiança.
+    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/IRS" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "PT",  label: "Portugal",               short: "Portugal", color: "--bpt" },
+    { id: "DE",  label: "Alemanha",               short: "Alemanha", color: "--bde" },
+    { id: "SPR", label: "Diferença (spread)",     short: "Spread",   color: "--spr" },
+  ],
+  async load() {
+    const rows = await getCSV(ECB + "IRS/M.PT+DE.L.L40.CI.0000.EUR.N.Z?format=csvdata&startPeriod=1999-01");
+    const by = { PT: {}, DE: {} };
+    for (const r of rows) { const a = r.key.split(".")[2]; if (by[a] && r.v != null) by[a][r.t] = r.v; }
+    const periods = [...new Set([...Object.keys(by.PT), ...Object.keys(by.DE)])].sort();
+    const PT = periods.map(p => by.PT[p] ?? null), DE = periods.map(p => by.DE[p] ?? null);
+    return { periods, values: { PT, DE, SPR: PT.map((v, k) => v != null && DE[k] != null ? v - DE[k] : null) }, errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const S = d.values.SPR, i = lastIdx(S);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const s = S[i], s12 = S[i - 12];
+    let text, color;
+    if (s <= 0.75) { text = "Os mercados confiam na dívida portuguesa"; color = "var(--down)"; }
+    else if (s <= 2) { text = "A dívida portuguesa paga um prémio moderado"; color = "var(--flat)"; }
+    else { text = "Os mercados estão a exigir mais juros a Portugal"; color = "var(--up)"; }
+    let msg = `Em ${monthLong(d.periods[i])}, o Estado português pagava ${fmt(d.values.PT[i], 2)}% para se financiar a 10 anos e a Alemanha ${fmt(d.values.DE[i], 2)}%: uma diferença de ${fmt(s, 2)} pontos`;
+    msg += s12 != null ? `, ${Math.abs(s - s12) < 0.05 ? "praticamente igual a" : fmt(Math.abs(s - s12), 2) + " pontos " + (s < s12 ? "abaixo de" : "acima de")} há um ano.` : ".";
+    let pk = 0; for (let k = 0; k <= i; k++) if (S[k] != null && (S[pk] == null || S[k] > S[pk])) pk = k;
+    if (S[pk] != null && S[pk] > s + 1) msg += ` No pior momento, em ${monthLong(d.periods[pk])}, a diferença chegou a ${fmt(S[pk], 1)} pontos.`;
+    msg += " Um spread baixo quer dizer juros mais baixos para o Estado e, indiretamente, para bancos, empresas e famílias.";
+    return { text, color, msg };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + monthLabel(d.periods[i]) : ""), value: i >= 0 ? a[i] : null, d: 2, unit: s.id === "SPR" ? " p.p." : "%",
+               deltas: deltaHTML(a[i], a[i - 1], "vs mês anterior", 2, false, " p.p.") + deltaHTML(a[i], a[i - 12], "vs há um ano", 2, false, " p.p.") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return [
+      { type: "line", label: "Portugal", data: d.values.PT.slice(start, end), hidden: !visible.PT, borderColor: css("--bpt"), backgroundColor: css("--bpt"), borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+      { type: "line", label: "Alemanha", data: d.values.DE.slice(start, end), hidden: !visible.DE, borderColor: css("--bde"), backgroundColor: css("--bde"), borderWidth: 2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+      { type: "bar", label: "Diferença (spread)", data: d.values.SPR.slice(start, end), hidden: !visible.SPR, backgroundColor: css("--spr"), borderWidth: 0, barPercentage: 1, categoryPercentage: 1, order: 2 },
+    ];
+  },
+  label: monthLabel,
+  tooltip: (s, v) => s.id === "SPR" ? ` Spread: ${fmt(v, 2)} p.p.` : ` ${s.short}: ${fmt(v, 2)}%`,
+  yTick: v => fmt(v, v % 1 === 0 ? 0 : 1) + "%",
+};
+
+/* =====================================================================
+   MÓDULO — Dívida pública e défice (BCE)
+   ===================================================================== */
+const GOV = {
+  key: "gov",
+  title: "Dívida pública e défice",
+  defaultYears: 10, perYear: 4,
+  source: `Dívida pública: dívida bruta das administrações públicas (critério de Maastricht) em % do PIB dos últimos 12 meses, no fim de cada trimestre.
+    Saldo orçamental: receitas menos despesas do Estado em % do PIB (negativo = défice). As regras europeias apontam para dívida abaixo de 60% do PIB e défice abaixo de 3%.
+    Fonte: INE e Banco de Portugal, <a href="https://data.ecb.europa.eu/data/datasets/GFS" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "DEBT", label: "Dívida pública", short: "Dívida", color: "--debt" },
+    { id: "BAL",  label: "Saldo orçamental", short: "Saldo", color: "--bal-up" },
+  ],
+  async load(prev) {
+    const [debt, balQ, balA] = await Promise.allSettled([
+      getCSV(ECB + "GFS/Q.N.PT.W0.S13.S1.C.L.LE.GD.T._Z.XDC_R_B1GQ_CY._T.F.V.N._T?format=csvdata&startPeriod=2000-Q1"),
+      getCSV(ECB + "GFS/Q.N.PT.W0.S13.S1._Z.B.B9._Z._Z._Z.XDC_R_B1GQ_CY._Z.S.V.N._T?format=csvdata&startPeriod=2000-Q1"),
+      getCSV(ECB + "GFS/A.N.PT.W0.S13.S1._Z.B.B9._Z._Z._Z.XDC_R_B1GQ._Z.S.V.N._T?format=csvdata&startPeriod=2000"),
+    ]);
+    if (debt.status === "rejected") throw new Error(debt.reason.message);
+    const errors = [], D = {}, B = {};
+    for (const r of debt.value) if (r.v != null) D[r.t] = r.v;
+    let balFreq = "q";
+    if (balQ.status === "fulfilled") { for (const r of balQ.value) if (r.v != null) B[r.t] = r.v; }
+    if (!Object.keys(B).length && balA.status === "fulfilled") { balFreq = "a"; for (const r of balA.value) if (r.v != null) B[r.t + "-Q4"] = r.v; }
+    if (!Object.keys(B).length) errors.push("saldo orçamental: sem dados");
+    const periods = [...new Set([...Object.keys(D), ...Object.keys(B)])].sort();
+    return { periods, balFreq, values: { DEBT: periods.map(q => D[q] ?? null), BAL: periods.map(q => B[q] ?? null) }, errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const D = d.values.DEBT, B = d.values.BAL, i = lastIdx(D), j = lastIdx(B);
+    if (i < 4) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const dd = D[i] - D[i - 4], bal = j >= 0 ? B[j] : null;
+    let text, color;
+    if (dd <= -1 && bal != null && bal >= 0) { text = "As contas públicas estão a melhorar"; color = "var(--down)"; }
+    else if (dd <= -1) { text = "A dívida pública está a descer"; color = "var(--down)"; }
+    else if (dd >= 1 && bal != null && bal < -3) { text = "As contas públicas estão a piorar"; color = "var(--up)"; }
+    else if (dd >= 1) { text = "A dívida pública está a subir"; color = "var(--up)"; }
+    else { text = "A dívida pública está estável"; color = "var(--flat)"; }
+    let msg = `No fim do ${qLong(d.periods[i])}, a dívida pública era de ${fmt(D[i], 1)}% do PIB, ${Math.abs(dd) < 0.1 ? "igual a" : fmt(Math.abs(dd), 1) + " pontos " + (dd < 0 ? "abaixo de" : "acima de")} um ano antes.`;
+    let pk = 0; for (let k = 0; k <= i; k++) if (D[k] != null && (D[pk] == null || D[k] > D[pk])) pk = k;
+    if (D[pk] - D[i] > 5) msg += ` O máximo foi ${fmt(D[pk], 1)}% no ${qLong(d.periods[pk])}.`;
+    if (bal != null) {
+      const when = d.balFreq === "a" ? "em " + d.periods[j].slice(0, 4) : "nos 12 meses até ao " + qLong(d.periods[j]);
+      msg += ` O Estado teve ${bal >= 0 ? "um excedente" : "um défice"} de ${fmt(Math.abs(bal), 1)}% do PIB ${when}.`;
+    }
+    msg += D[i] > 60 ? ` A dívida continua acima do limite europeu de 60% do PIB.` : ` A dívida está abaixo do limite europeu de 60% do PIB.`;
+    return { text, color, msg };
+  },
+  rates(d) {
+    const D = d.values.DEBT, B = d.values.BAL, i = lastIdx(D), j = lastIdx(B);
+    const jPrev = (() => { for (let k = j - (d.balFreq === "a" ? 1 : 4); k >= 0; k--) if (B[k] != null) return k; return -1; })();
+    return [
+      { id: "DEBT", name: "Dívida pública · " + (i >= 0 ? qLabel(d.periods[i]) : "—"), value: i >= 0 ? D[i] : null, d: 1, unit: "% do PIB",
+        deltas: deltaHTML(D[i], D[i - 4], "vs um ano antes", 1, false, " p.p.") + deltaHTML(D[i], D[i - 1], "vs trimestre anterior", 1, false, " p.p.") },
+      { id: "BAL", name: "Saldo orçamental · " + (j >= 0 ? (d.balFreq === "a" ? d.periods[j].slice(0, 4) : "12 meses até " + qLabel(d.periods[j])) : "—"), value: j >= 0 ? B[j] : null, d: 1, unit: "% do PIB", signed: true,
+        deltas: (j >= 0 ? `<span>${B[j] >= 0 ? "excedente" : "défice"}</span>` : "") + (jPrev >= 0 ? deltaHTML(B[j], B[jPrev], d.balFreq === "a" ? "vs ano anterior" : "vs um ano antes", 1, true, " p.p.") : "") },
+    ];
+  },
+  datasets(d, start, end, visible) {
+    const bal = d.values.BAL.slice(start, end), up = css("--bal-up"), down = css("--bal-down");
+    return [
+      { type: "line", label: "Dívida pública", data: d.values.DEBT.slice(start, end), hidden: !visible.DEBT, yAxisID: "y", borderColor: css("--debt"), backgroundColor: css("--debt"), borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+      { type: "bar", label: "Saldo orçamental", data: bal, hidden: !visible.BAL, yAxisID: "y2", backgroundColor: bal.map(v => v >= 0 ? up : down), borderWidth: 0, borderRadius: 2, maxBarThickness: 16, order: 2 },
+    ];
+  },
+  y2: { tick: v => fmt(v, 0) + "%" },
+  label: qLabel,
+  tooltip: (s, v) => s.id === "DEBT" ? ` Dívida: ${fmt(v, 1)}% do PIB` : ` Saldo: ${sign(v)}${fmt(Math.abs(v), 1)}% do PIB`,
+  yTick: v => fmt(v, 0) + "%",
+};
+
+/* =====================================================================
+   MÓDULO — As casas estão sobrevalorizadas? (BCE)
+   ===================================================================== */
+const OVER = {
+  key: "over",
+  container: "modules-hab",
+  title: "As casas estão sobrevalorizadas?",
+  defaultYears: 0, perYear: 4,
+  source: `Preço real das casas: índice de preços da habitação (INE) descontada a inflação, medida pelo deflator do consumo privado, como faz o Banco de Portugal.
+    Tendência: linha reta ajustada a todo o período disponível (em escala logarítmica). O Banco de Portugal considera haver sobrevalorização quando o preço real fica mais de 10% acima da tendência de longo prazo.
+    Atenção: é uma estimativa simples, feita pela página, e não o modelo oficial do Banco de Portugal; o valor exato depende do método e do período usado.
+    Fonte: INE, <a href="https://data.ecb.europa.eu/data/datasets/RESR" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "REAL",  label: "Preço real das casas",      short: "Preço real", color: "--hpi" },
+    { id: "TREND", label: "Tendência de longo prazo",  short: "Tendência",  color: "--ratio", dashed: true },
+    { id: "GAP",   label: "Distância à tendência",     short: "Distância",  color: "--gap-up" },
+  ],
+  async load() {
+    const [hpi, cons] = await Promise.all([
+      getCSV(ECB + "RESR/Q.PT._T.N._TR.TVAL..TB.N.IX?format=csvdata&startPeriod=2000-Q1"),
+      getCSV(ECB + "MNA/" + mnaKey("P31", "") + "?format=csvdata&startPeriod=2000-Q1"),
+    ]);
+    const H = pickBest(hpi, p => true, p => ["4D0", "4F0", "29"].indexOf(p[7]) + 1 || 9);
+    const pc = p => ["S1M", "S14_S15", "S14"].includes(p[5]);
+    const rk = p => ["S1M", "S14_S15", "S14"].indexOf(p[5]) * 100 + adjRank(p[2]) * 10 + unitRank(p[12]);
+    const V = pickBest(cons, p => p[8] === "P31" && pc(p) && p[13] === "V", rk);
+    const L = pickBest(cons, p => p[8] === "P31" && pc(p) && p[13] === "LR", rk);
+    if (!H || !V || !L) throw new Error("faltam dados do BCE para calcular o preço real");
+    const qs = Object.keys(H).filter(q => V[q] && L[q]).sort();
+    if (qs.length < 12) throw new Error("dados insuficientes");
+    const real0 = qs.map(q => H[q] / (V[q] / L[q]));
+    const base = real0[0], REAL = real0.map(v => v / base * 100);
+    // tendência log-linear (mínimos quadrados)
+    const n = REAL.length, xs = REAL.map((_, k) => k), ys = REAL.map(Math.log);
+    const mx = xs.reduce((a, b) => a + b) / n, my = ys.reduce((a, b) => a + b) / n;
+    let sxy = 0, sxx = 0; for (let k = 0; k < n; k++) { sxy += (xs[k] - mx) * (ys[k] - my); sxx += (xs[k] - mx) ** 2; }
+    const b = sxy / sxx, a = my - b * mx;
+    const TREND = xs.map(x => Math.exp(a + b * x));
+    return { periods: qs, values: { REAL, TREND, GAP: REAL.map((v, k) => (v / TREND[k] - 1) * 100) }, errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const G = d.values.GAP, R = d.values.REAL, i = lastIdx(G);
+    if (i < 4) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const g = G[i], ry = (R[i] / R[i - 4] - 1) * 100;
+    let text, color;
+    if (g >= 10) { text = "As casas parecem sobrevalorizadas"; color = "var(--up)"; }
+    else if (g >= 3) { text = "Os preços das casas estão acima da tendência"; color = "var(--flat)"; }
+    else if (g <= -10) { text = "As casas parecem abaixo do seu valor de tendência"; color = "var(--down)"; }
+    else { text = "Os preços das casas estão perto da tendência de longo prazo"; color = "var(--flat)"; }
+    let msg = `No ${qLong(d.periods[i])}, o preço das casas descontada a inflação estava ${fmt(Math.abs(g), 0)}% ${g >= 0 ? "acima" : "abaixo"} da sua tendência de longo prazo (desde ${qLabel(d.periods[0])}).`;
+    msg += ` Num ano, os preços reais ${ry >= 0 ? "subiram" : "desceram"} ${fmt(Math.abs(ry), 1)}%, ou seja, ${ry >= 0 ? "mais" : "menos"} do que a inflação.`;
+    let lo = 0; for (let k = 0; k <= i; k++) if (G[k] < G[lo]) lo = k;
+    if (G[lo] < -10) msg += ` No ponto mais baixo, no ${qLong(d.periods[lo])}, estavam ${fmt(Math.abs(G[lo]), 0)}% abaixo.`;
+    msg += " É uma estimativa simples: serve para ver a tendência, não para dar um valor exato.";
+    return { text, color, msg };
+  },
+  rates(d) {
+    const G = d.values.GAP, R = d.values.REAL, i = lastIdx(G);
+    return [
+      { id: "GAP", name: "Distância à tendência · " + (i >= 0 ? qLabel(d.periods[i]) : "—"), value: i >= 0 ? G[i] : null, d: 0, unit: "%", signed: true,
+        deltas: `<span>acima de +10% = sobrevalorização</span>` + deltaHTML(G[i], G[i - 4], "vs um ano antes", 0, false, " p.p.") },
+      { id: "REAL", name: "Preço real das casas · " + (i >= 0 ? qLabel(d.periods[i]) : "—"), value: i >= 4 ? (R[i] / R[i - 4] - 1) * 100 : null, d: 1, unit: "%", signed: true,
+        deltas: `<span>subida num ano, descontada a inflação</span>` },
+    ];
+  },
+  datasets(d, start, end, visible) {
+    const gap = d.values.GAP.slice(start, end), up = css("--gap-up"), down = css("--gap-down");
+    return [
+      { type: "line", label: "Preço real das casas", data: d.values.REAL.slice(start, end), hidden: !visible.REAL, yAxisID: "y", borderColor: css("--hpi"), backgroundColor: css("--hpi"), borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, order: 1 },
+      { type: "line", label: "Tendência de longo prazo", data: d.values.TREND.slice(start, end), hidden: !visible.TREND, yAxisID: "y", borderColor: css("--ratio"), backgroundColor: css("--ratio"), borderWidth: 2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 4, order: 1 },
+      { type: "bar", label: "Distância à tendência", data: gap, hidden: !visible.GAP, yAxisID: "y2", backgroundColor: gap.map(v => v >= 0 ? up : down), borderWidth: 0, borderRadius: 2, maxBarThickness: 12, order: 2 },
+    ];
+  },
+  y2: { tick: v => sign(v) + fmt(Math.abs(v), 0) + "%" },
+  label: qLabel,
+  tooltip: (s, v) => s.id === "GAP" ? ` Distância à tendência: ${sign(v)}${fmt(Math.abs(v), 0)}%` : ` ${s.short}: ${fmt(v, 0)}`,
+  yTick: v => fmt(v, 0),
+};
+
+/* =====================================================================
+   MÓDULO — Juros do crédito à habitação (BCE)
+   ===================================================================== */
+const MRATE = {
+  key: "mrate",
+  container: "modules-hab",
+  title: "Juros do crédito à habitação",
+  defaultYears: 5, perYear: 12,
+  source: `Taxa de juro média dos novos empréstimos à habitação concedidos pelos bancos em Portugal (taxa anual acordada), mês a mês, comparada com a Euribor a 12 meses.
+    A diferença reflete a margem (spread) dos bancos e o peso dos créditos a taxa fixa ou mista.
+    Fonte: Banco de Portugal, <a href="https://data.ecb.europa.eu/data/datasets/MIR" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "TAXA", label: "Taxa dos novos créditos", short: "Novos créditos", color: "--l200" },
+    { id: "E12",  label: "Euribor 12 meses",       short: "Euribor 12M",    color: "--m12", dashed: true },
+    { id: "GAP",  label: "Diferença",               short: "Diferença",      color: "--spr" },
+  ],
+  async load() {
+    const [mir, eur] = await Promise.all([
+      getCSV(ECB + "MIR/M.PT.B.A2C.A.R.A.2250.EUR.?format=csvdata&startPeriod=2003-01"),
+      getCSV(ECB + "FM/M.U2.EUR.RT.MM.EURIBOR1YD_.HSTA?format=csvdata&startPeriod=2003-01"),
+    ]);
+    const by = {};
+    for (const r of mir) if (r.v != null) (by[r.key.split(".").pop()] ||= {})[r.t] = r.v;
+    const T = by.N || by.P || Object.values(by)[0];
+    if (!T) throw new Error("o BCE não tem a taxa dos novos créditos para Portugal");
+    const E = {}; for (const r of eur) if (r.v != null) E[r.t] = r.v;
+    const periods = Object.keys(T).sort();
+    const TAXA = periods.map(p => T[p]), E12 = periods.map(p => E[p] ?? null);
+    return { periods, values: { TAXA, E12, GAP: TAXA.map((v, k) => E12[k] != null ? v - E12[k] : null) }, errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const T = d.values.TAXA, E = d.values.E12, G = d.values.GAP, i = lastIdx(T);
+    if (i < 12) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const dy = T[i] - T[i - 12];
+    let text, color;
+    if (dy <= -0.2) { text = "Os bancos estão a baixar os juros do crédito à habitação"; color = "var(--down)"; }
+    else if (dy >= 0.2) { text = "Os juros do crédito à habitação estão a subir"; color = "var(--up)"; }
+    else { text = "Os juros do crédito à habitação estão estáveis"; color = "var(--flat)"; }
+    let msg = `Em ${monthLong(d.periods[i])}, os novos créditos à habitação tiveram uma taxa média de ${fmt(T[i], 2)}%, ${Math.abs(dy) < 0.05 ? "igual a" : fmt(Math.abs(dy), 2) + " pontos " + (dy < 0 ? "abaixo de" : "acima de")} há um ano.`;
+    if (E[i] != null) msg += ` A Euribor a 12 meses estava em ${fmt(E[i], 2)}%: a diferença é de ${fmt(G[i], 2)} pontos` +
+      (G[i - 12] != null ? ` (${fmt(G[i - 12], 2)} há um ano)${G[i] < G[i - 12] - 0.1 ? ", sinal de mais concorrência entre bancos ou de mais créditos a taxa fixa com juros baixos" : G[i] > G[i - 12] + 0.1 ? ", sinal de margens maiores ou de mais créditos a taxa fixa com juros altos" : ""}.` : ".");
+    return { text, color, msg };
+  },
+  rates(d) {
+    return this.series.map(s => {
+      const a = d.values[s.id], i = lastIdx(a);
+      return { id: s.id, name: s.label + (i >= 0 ? " · " + monthLabel(d.periods[i]) : ""), value: i >= 0 ? a[i] : null, d: 2, unit: s.id === "GAP" ? " p.p." : "%",
+               deltas: deltaHTML(a[i], a[i - 1], "vs mês anterior", 2, false, " p.p.") + deltaHTML(a[i], a[i - 12], "vs há um ano", 2, false, " p.p.") };
+    });
+  },
+  datasets(d, start, end, visible) {
+    return [
+      { type: "line", label: this.series[0].label, data: d.values.TAXA.slice(start, end), hidden: !visible.TAXA, borderColor: css("--l200"), backgroundColor: css("--l200"), borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+      { type: "line", label: this.series[1].label, data: d.values.E12.slice(start, end), hidden: !visible.E12, borderColor: css("--m12"), backgroundColor: css("--m12"), borderWidth: 2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+      { type: "bar", label: this.series[2].label, data: d.values.GAP.slice(start, end), hidden: !visible.GAP, backgroundColor: css("--spr"), borderWidth: 0, barPercentage: 1, categoryPercentage: 1, order: 2 },
+    ];
+  },
+  label: monthLabel,
+  tooltip: (s, v) => s.id === "GAP" ? ` Diferença: ${fmt(v, 2)} p.p.` : ` ${s.short}: ${fmt(v, 2)}%`,
+  yTick: v => fmt(v, v % 1 === 0 ? 0 : 1) + "%",
+};
+
+/* =====================================================================
+   MÓDULO — Novos créditos à habitação: as famílias pedem mais ou menos? (BCE)
+   ===================================================================== */
+const MLOANS = {
+  key: "mloans",
+  container: "modules-hab",
+  title: "Novos créditos à habitação",
+  defaultYears: 5, perYear: 12,
+  source: `Montante de novos empréstimos à habitação concedidos pelos bancos em Portugal em cada mês, em milhões de euros, sem contar renegociações.
+    A linha mostra a média mensal dos últimos 12 meses, para ver a tendência sem as oscilações de mês para mês (em agosto, por exemplo, há sempre menos contratos).
+    Renegociações: créditos antigos cujas condições foram alteradas, muitas vezes para baixar a prestação.
+    Fonte: Banco de Portugal, <a href="https://data.ecb.europa.eu/data/datasets/MIR" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+  series: [
+    { id: "NEW", label: "Novos créditos no mês",       short: "Novos",          color: "--sales" },
+    { id: "AVG", label: "Média dos últimos 12 meses",  short: "Média 12 meses", color: "--cred" },
+    { id: "REN", label: "Renegociações",               short: "Renegociações",  color: "--ratio", dashed: true },
+  ],
+  async load() {
+    const rows = await getCSV(ECB + "MIR/M.PT.B.A2C.A.B.A.2250.EUR.?format=csvdata&startPeriod=2003-01");
+    const by = {};
+    for (const r of rows) if (r.v != null) (by[r.key.split(".").pop()] ||= {})[r.t] = r.v;
+    let P = by.P, R = by.R;
+    if (!P && by.N && R) { P = {}; for (const m in by.N) if (R[m] != null) P[m] = by.N[m] - R[m]; }
+    if (!P) P = by.N;
+    if (!P) throw new Error("o BCE não tem os montantes de crédito à habitação para Portugal");
+    const periods = Object.keys(P).sort();
+    const NEW = periods.map(m => P[m]);
+    const AVG = NEW.map((_, i) => { if (i < 11) return null; let t = 0; for (let k = i - 11; k <= i; k++) t += NEW[k]; return t / 12; });
+    return { periods, pureNew: !!by.P, values: { NEW, AVG, REN: periods.map(m => R?.[m] ?? null) }, errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const N = d.values.NEW, A = d.values.AVG, R = d.values.REN, i = lastIdx(N);
+    if (i < 23) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const t12 = A[i] * 12, t12a = A[i - 12] * 12, y = (t12 / t12a - 1) * 100;
+    let text, color;
+    if (y >= 10) { text = "As famílias estão a pedir muito mais crédito à habitação"; color = "var(--up)"; }
+    else if (y >= 3) { text = "As famílias estão a pedir mais crédito à habitação"; color = "var(--up)"; }
+    else if (y > -3) { text = "O crédito à habitação pedido está estável"; color = "var(--flat)"; }
+    else { text = "As famílias estão a pedir menos crédito à habitação"; color = "var(--down)"; }
+    const mil = v => fmt(v / 1000, 1) + " mil milhões de euros";
+    let msg = `Nos 12 meses até ${monthLong(d.periods[i])}, os bancos concederam ${mil(t12)} em novos créditos à habitação, ${y >= 0 ? "mais" : "menos"} ${fmt(Math.abs(y), 0)}% do que nos 12 meses anteriores.`;
+    if (N[i - 12] != null) msg += ` Só em ${monthLong(d.periods[i]).replace(/ de \d{4}$/, "")}, foram ${fmt(N[i], 0)} milhões, contra ${fmt(N[i - 12], 0)} milhões no mesmo mês do ano passado.`;
+    // máximo desde quando?
+    let k = i - 1; while (k >= 11 && (A[k] == null || A[k] <= A[i])) k--;
+    if (k < i - 24) msg += k >= 11 ? ` É o valor mais alto desde ${d.periods[k].slice(0, 4)}.` : " É o valor mais alto da série.";
+    const r12 = R.slice(i - 11, i + 1).every(v => v != null) ? R.slice(i - 11, i + 1).reduce((a, b) => a + b, 0) : null;
+    if (r12 != null) msg += ` Além disso, renegociaram-se ${mil(r12)} de créditos antigos no mesmo período.`;
+    return { text, color, msg };
+  },
+  rates(d) {
+    const N = d.values.NEW, A = d.values.AVG, R = d.values.REN, i = lastIdx(N);
+    const t12 = i >= 11 ? A[i] * 12 : null, t12a = i >= 23 ? A[i - 12] * 12 : null;
+    const r12 = i >= 11 && R.slice(i - 11, i + 1).every(v => v != null) ? R.slice(i - 11, i + 1).reduce((a, b) => a + b, 0) : null;
+    const r12a = i >= 23 && R.slice(i - 23, i - 11).every(v => v != null) ? R.slice(i - 23, i - 11).reduce((a, b) => a + b, 0) : null;
+    const pct = (a, b) => a != null && b ? (a / b - 1) * 100 : null;
+    return [
+      { id: "NEW", name: "Novos créditos · " + (i >= 0 ? monthLabel(d.periods[i]) : "—"), value: i >= 0 ? N[i] : null, d: 0, unit: " M€",
+        deltas: deltaHTML(pct(N[i], N[i - 12]), 0, "vs mesmo mês do ano passado", 1, false, "%") },
+      { id: "AVG", name: "Total dos últimos 12 meses", value: t12 != null ? t12 / 1000 : null, d: 1, unit: " mil M€",
+        deltas: deltaHTML(pct(t12, t12a), 0, "vs 12 meses anteriores", 1, false, "%") },
+      { id: "REN", name: "Renegociações · 12 meses", value: r12 != null ? r12 / 1000 : null, d: 1, unit: " mil M€",
+        deltas: deltaHTML(pct(r12, r12a), 0, "vs 12 meses anteriores", 1, false, "%") },
+    ];
+  },
+  datasets(d, start, end, visible) {
+    return [
+      { type: "bar", label: this.series[0].label, data: d.values.NEW.slice(start, end), hidden: !visible.NEW, backgroundColor: css("--sales"), borderWidth: 0, barPercentage: 1, categoryPercentage: 0.9, order: 2 },
+      { type: "line", label: this.series[1].label, data: d.values.AVG.slice(start, end), hidden: !visible.AVG, borderColor: css("--cred"), backgroundColor: css("--cred"), borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+      { type: "line", label: this.series[2].label, data: d.values.REN.slice(start, end), hidden: !visible.REN, borderColor: css("--ratio"), backgroundColor: css("--ratio"), borderWidth: 1.75, borderDash: [4, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: true, order: 1 },
+    ];
+  },
+  label: monthLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 0)} M€`,
+  yTick: v => fmt(v, 0) + " M€",
+};
+
+/* =====================================================================
+   MÓDULO — Valor das casas em Portugal: por ano, com previsões
+   ===================================================================== */
+// Previsões publicadas (valores fixos: atualizar quando sair um relatório novo)
+const HOUSE_FORECAST = {
+  source: "S&P Global Ratings", published: "2026-07-14", reviewBy: "2027-02-28",
+  link: "https://www.idealista.pt/news/imobiliario/habitacao/2026/07/15/76574-portugal-tera-a-maior-subida-do-preco-das-casas-em-2026-preve-sp",
+  values: { 2026: 10.0, 2027: 5.5, 2028: 5.0 },
+};
+const HPIPT = {
+  key: "hpipt",
+  container: "modules-hab",
+  title: "Valor das casas em Portugal",
+  defaultYears: 12, perYear: 1,
+  get source() {
+    const f = HOUSE_FORECAST, stale = new Date().toISOString().slice(0, 10) > f.reviewBy;
+    return `Variação média anual do índice de preços da habitação do INE para Portugal (todas as casas vendidas, novas e usadas), como o INE a calcula: média dos 4 trimestres do ano face à média do ano anterior.
+      O ano em curso usa só os trimestres já publicados, comparados com os mesmos trimestres do ano anterior. Dados reais: INE, <a href="https://data.ecb.europa.eu/data/datasets/RESR" target="_blank" rel="noopener">BCE Data Portal</a>, atualizados sozinhos.
+      Previsões: <a href="${f.link}" target="_blank" rel="noopener">${f.source}</a>, publicadas a ${dayLabel(f.published)}. <strong>As previsões não se atualizam sozinhas.</strong>` +
+      (stale ? ` <span style="color:var(--up)">Estas previsões já têm vários meses: pede para as atualizar.</span>` : "");
+  },
+  series: [
+    { id: "ACT", label: "Variação anual (real)",       short: "Real",     color: "--gap-up" },
+    { id: "YTD", label: "Ano em curso (até agora)",     short: "Até agora", color: "--hpi" },
+    { id: "FC",  label: "Previsão",                     short: "Previsão", color: "--ratio" },
+  ],
+  async load() {
+    const rows = await getCSV(ECB + "RESR/Q.PT._T.N._TR.TVAL..TB.N.IX?format=csvdata&startPeriod=2000-Q1");
+    const series = {};
+    for (const r of rows) if (r.v != null) (series[r.key.split(".")[7]] ||= {})[r.t] = r.v;
+    const H = series["4D0"] || series["4F0"] || Object.values(series)[0];
+    if (!H) throw new Error("o BCE não tem o índice de preços da habitação para Portugal");
+    const qs = Object.keys(H).sort(), lastQ = qs[qs.length - 1], lastY = +lastQ.slice(0, 4), nQ = +lastQ.slice(-1);
+    const avg = (y, n) => { let t = 0; for (let q = 1; q <= n; q++) { const v = H[`${y}-Q${q}`]; if (v == null) return null; t += v; } return t / n; };
+    const firstY = +qs[0].slice(0, 4) + 1, act = {};
+    for (let y = firstY; y <= lastY; y++) {
+      const full = y < lastY || nQ === 4, n = full ? 4 : nQ, a = avg(y, n), b = avg(y - 1, n);
+      if (a != null && b != null) act[y] = { v: (a / b - 1) * 100, partial: !full, n };
+    }
+    const fcYears = Object.keys(HOUSE_FORECAST.values).map(Number).filter(y => y >= lastY);
+    const years = [...new Set([...Object.keys(act).map(Number), ...fcYears])].sort((a, b) => a - b);
+    const lastQyoy = H[`${lastY - 1}-Q${nQ}`] ? (H[lastQ] / H[`${lastY - 1}-Q${nQ}`] - 1) * 100 : null;
+    return {
+      periods: years.map(String), lastQ, lastQyoy, level: H,
+      values: {
+        ACT: years.map(y => act[y] && !act[y].partial ? act[y].v : null),
+        YTD: years.map(y => act[y] && act[y].partial ? act[y].v : null),
+        FC:  years.map(y => HOUSE_FORECAST.values[y] ?? null),
+      },
+      ytdN: act[lastY]?.partial ? act[lastY].n : null,
+      errors: [], fetchedAt: Date.now(),
+    };
+  },
+  verdict(d) {
+    const A = d.values.ACT, Y = d.values.YTD, F = d.values.FC, P = d.periods;
+    const iA = lastIdx(A); if (iA < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const yA = P[iA], a = A[iA];
+    const iY = lastIdx(Y), cur = iY >= 0 ? P[iY] : String(+yA + 1);
+    const fCur = HOUSE_FORECAST.values[cur], fNext = HOUSE_FORECAST.values[+cur + 1];
+    const ref = iY >= 0 ? Y[iY] : fCur;
+    let text, color;
+    if (ref == null) { text = a >= 3 ? "As casas estão a valorizar" : a <= -2 ? "As casas estão a desvalorizar" : "O valor das casas está estável"; color = a >= 3 ? "var(--up)" : a <= -2 ? "var(--down)" : "var(--flat)"; }
+    else if (fNext != null && fNext < ref - 2) { text = "As casas continuam a subir, mas deverão abrandar"; color = "var(--up)"; }
+    else if (ref >= 10) { text = "As casas continuam a valorizar muito depressa"; color = "var(--up)"; }
+    else if (ref >= 3) { text = "As casas continuam a valorizar"; color = "var(--up)"; }
+    else if (ref > -2) { text = "O valor das casas está a estabilizar"; color = "var(--flat)"; }
+    else { text = "As casas estão a desvalorizar"; color = "var(--down)"; }
+    const v = x => (x >= 0 ? "subiram " : "desceram ") + fmt(Math.abs(x), 1) + "%";
+    let msg = `Em ${yA}, os preços das casas em Portugal ${v(a)} em média.`;
+    if (iY >= 0) msg += ` Em ${cur}, até ao ${d.ytdN}.º trimestre, ${v(Y[iY]).replace(/^s/, "estão a s").replace("subiram", "subir").replace("desceram", "descer")} face ao mesmo período do ano passado` +
+                        (d.lastQyoy != null ? ` (${sign(d.lastQyoy)}${fmt(Math.abs(d.lastQyoy), 1)}% no ${qLong(d.lastQ)}).` : ".");
+    const fs = Object.entries(HOUSE_FORECAST.values).filter(([y]) => +y >= +cur).map(([y, x]) => `${sign(x)}${fmt(x, 1)}% em ${y}`);
+    if (fs.length) msg += ` A ${HOUSE_FORECAST.source} prevê ${fs.length > 1 ? fs.slice(0, -1).join("; ") + " e " + fs[fs.length - 1] : fs[0]}.`;
+    const base = 200000, g = base * a / 100;
+    msg += ` Uma casa que valia 200 000 € no início de ${yA} ${a >= 0 ? "ganhou" : "perdeu"} cerca de ${fmt(Math.round(Math.abs(g) / 500) * 500, 0)} € nesse ano`;
+    if (fNext != null || fCur != null) {
+      const fx = fCur ?? fNext, gy = fCur != null ? cur : +cur + 1;
+      msg += `; se a previsão para ${gy} se confirmar, ganharia mais cerca de ${fmt(Math.round(base * (1 + a / 100) * fx / 100 / 500) * 500, 0)} €.`;
+    } else msg += ".";
+    return { text, color, msg };
+  },
+  rates(d) {
+    const A = d.values.ACT, Y = d.values.YTD, P = d.periods, iA = lastIdx(A), iY = lastIdx(Y);
+    const cur = iY >= 0 ? P[iY] : String(+P[iA] + 1);
+    const fy = Object.keys(HOUSE_FORECAST.values).filter(y => +y > +cur)[0] || cur;
+    return [
+      { id: "ACT", name: iA >= 0 ? P[iA] + " (ano completo)" : "Último ano", value: iA >= 0 ? A[iA] : null, d: 1, unit: "%", signed: true,
+        deltas: deltaHTML(A[iA], A[iA - 1], "vs " + (iA >= 1 ? P[iA - 1] : "ano anterior"), 1, false, " p.p.") },
+      { id: "YTD", name: iY >= 0 ? `${cur} até ao ${d.ytdN}.º trimestre` : cur + " (ainda sem dados)", value: iY >= 0 ? Y[iY] : null, d: 1, unit: "%", signed: true,
+        deltas: HOUSE_FORECAST.values[cur] != null ? `<span>previsão para o ano: ${sign(HOUSE_FORECAST.values[cur])}${fmt(HOUSE_FORECAST.values[cur], 1)}%</span>` : "" },
+      { id: "FC", name: `Previsão ${fy}`, value: HOUSE_FORECAST.values[fy] ?? null, d: 1, unit: "%", signed: true,
+        deltas: `<span>${HOUSE_FORECAST.source}, ${dayLabel(HOUSE_FORECAST.published)}</span>` },
+    ];
+  },
+  datasets(d, start, end, visible) {
+    const a = d.values.ACT.slice(start, end), up = css("--gap-up"), down = css("--gap-down");
+    return [
+      { type: "bar", label: this.series[0].label, data: a, hidden: !visible.ACT, backgroundColor: a.map(v => v >= 0 ? up : down), borderWidth: 0, borderRadius: 3, grouped: false, maxBarThickness: 34, order: 2 },
+      { type: "bar", label: this.series[1].label, data: d.values.YTD.slice(start, end), hidden: !visible.YTD, backgroundColor: css("--hpi"), borderWidth: 0, borderRadius: 3, grouped: false, maxBarThickness: 34, order: 2 },
+      { type: "bar", label: this.series[2].label, data: d.values.FC.slice(start, end), hidden: !visible.FC, backgroundColor: "transparent", borderColor: css("--ratio"), borderWidth: 2, borderDash: [4, 3], borderRadius: 3, grouped: false, maxBarThickness: 22, order: 1 },
+    ];
+  },
+  label: p => p,
+  tooltip: (s, v) => ` ${s.short}: ${sign(v)}${fmt(Math.abs(v), 1)}%`,
+  yTick: v => sign(v) + fmt(Math.abs(v), 0) + "%",
+};
+
 /* ---------- ordem dos gráficos ---------- */
-const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, HOUSE, HOUSEWAGE, RENT, MORT, BUILD, DEMAND, MIGR];
+const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR];
 
 /* ---------- construção e desenho genéricos ---------- */
 const state = {};
