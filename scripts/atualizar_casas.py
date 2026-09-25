@@ -1048,9 +1048,9 @@ FRED_URL = os.environ.get("FRED_URL", "https://fred.stlouisfed.org/graph/fredgra
 
 
 def fred(serie: str) -> dict:
-    req = urllib.request.Request(FRED_URL + serie, headers={**CABECALHOS, "Accept": "text/csv"})
+    req = urllib.request.Request(FRED_URL + serie, headers={**CABECALHOS, "Accept": "text/csv,*/*"})
     out = {}
-    for linha in ler_url(req, limite=60).decode("utf-8").strip().splitlines()[1:]:
+    for linha in ler_url(req, limite=90, pausa=45).decode("utf-8").strip().splitlines()[1:]:
         d, _, v = linha.partition(",")
         try:
             out[d.strip()] = float(v)
@@ -1059,41 +1059,79 @@ def fred(serie: str) -> dict:
     return out
 
 
-def atualizar_fed(hoje: datetime) -> bool:
-    """Guarda só os dias em que o intervalo-alvo da Fed mudou (antes de dez/2008 havia um alvo único)."""
-    try:
-        sup, inf = fred("DFEDTARU"), fred("DFEDTARL")
-    except Exception as e:
-        print(f"Fed (FRED): falhou ({e})", file=sys.stderr)
-        return False
+NYFED_URL = os.environ.get("NYFED_URL", "https://markets.newyorkfed.org/api/rates/unsecured/effr/search.json")
+
+
+def fed_do_fred() -> dict:
+    """{data: (inferior, superior)} a partir do FRED."""
+    sup, inf = fred("DFEDTARU"), fred("DFEDTARL")
     try:
         antigo = fred("DFEDTAR")
     except Exception:
         antigo = {}
-    datas, s_, i_ = [], [], []
+    out = {}
     for d in sorted(set(antigo) | set(sup)):
-        if d < "1999-01-01":
-            continue
         h = sup.get(d, antigo.get(d) if d not in inf else None)
         l = inf.get(d, antigo.get(d) if d not in sup else None)
-        if h is None or l is None:
+        if h is not None and l is not None:
+            out[d] = (l, h)
+    return out
+
+
+def fed_do_nyfed(hoje: datetime) -> dict:
+    """{data: (inferior, superior)} a partir da API da Reserva Federal de Nova Iorque (desde 2000), por blocos de 5 anos."""
+    out = {}
+    for ano in range(2000, hoje.year + 1, 5):
+        ini, fim = f"{ano}-01-01", f"{min(ano + 4, hoje.year)}-12-31"
+        req = urllib.request.Request(NYFED_URL + "?" + urllib.parse.urlencode({"startDate": ini, "endDate": fim}),
+                                     headers={**CABECALHOS, "Accept": "application/json"})
+        j = json.loads(ler_url(req, limite=90, pausa=45).decode("utf-8"))
+        for r in j.get("refRates") or []:
+            d, lo, hi = r.get("effectiveDate"), r.get("targetRateFrom"), r.get("targetRateTo")
+            if d and lo is not None and hi is not None:
+                out[d] = (float(lo), float(hi))
+        time.sleep(1)
+    return out
+
+
+def atualizar_fed(hoje: datetime) -> bool:
+    """Guarda só os dias em que o intervalo-alvo da Fed mudou. Tenta o FRED e, se falhar, a Fed de Nova Iorque."""
+    dias, fonte = {}, ""
+    for nome, obter in (("FRED", fed_do_fred), ("Fed de Nova Iorque", lambda: fed_do_nyfed(hoje))):
+        try:
+            dias = obter()
+            if dias:
+                fonte = nome
+                break
+            print(f"Fed ({nome}): resposta sem valores.", file=sys.stderr)
+        except Exception as e:
+            print(f"Fed ({nome}): falhou ({type(e).__name__}: {e})", file=sys.stderr)
+    if not dias:
+        return False
+    datas, s_, i_ = [], [], []
+    for d in sorted(dias):
+        if d < "1999-01-01":
             continue
+        l, h = dias[d]
         if not datas or s_[-1] != h or i_[-1] != l:
             datas.append(d); s_.append(h); i_.append(l)
-    if not datas:
-        print("Fed (FRED): sem valores.", file=sys.stderr)
-        return False
-    novo = {"fonte": "FRED (Reserva Federal de St. Louis): DFEDTARU, DFEDTARL e DFEDTAR",
-            "mudancas": {"datas": datas, "superior": s_, "inferior": i_}}
     velho = ler(FED)
-    if velho.get("mudancas") == novo["mudancas"]:
+    # se a fonte alternativa só tiver dados desde 2000, mantém o histórico mais antigo que já estivesse guardado
+    vm = velho.get("mudancas") or {}
+    if vm.get("datas") and datas and vm["datas"][0] < datas[0]:
+        k = [n for n, d in enumerate(vm["datas"]) if d < datas[0]]
+        datas = [vm["datas"][n] for n in k] + datas
+        s_ = [vm["superior"][n] for n in k] + s_
+        i_ = [vm["inferior"][n] for n in k] + i_
+    novo = {"fonte": f"{fonte}: intervalo-alvo da taxa dos fed funds", "mudancas": {"datas": datas, "superior": s_, "inferior": i_}}
+    if vm == novo["mudancas"]:
         print("fed.json: sem alterações.")
         return True
     novo["atualizado"] = hoje.strftime("%Y-%m-%dT%H:%M:%SZ")
     os.makedirs(PASTA, exist_ok=True)
     with open(FED, "w", encoding="utf-8") as f:
         json.dump(novo, f, ensure_ascii=False, indent=1)
-    print(f"fed.json: gravado, {len(datas)} mudanças, atual {i_[-1]}–{s_[-1]}% desde {datas[-1]}.")
+    print(f"fed.json: gravado a partir de {fonte}, {len(datas)} mudanças, atual {i_[-1]}–{s_[-1]}% desde {datas[-1]}.")
     return True
 
 
