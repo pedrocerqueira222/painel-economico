@@ -945,6 +945,7 @@ const RENT = {
   get chartPerYear() { return state[this.key]?.data?.perYear || 4; },
   source: `Renda mediana por m² dos novos contratos de arrendamento (alojamentos familiares), calculada com os contratos dos últimos 12 meses.
     São as rendas pedidas a quem arrenda agora, não as rendas antigas já em vigor. A área usada é a área bruta privativa da casa.
+    O INE só publica o histórico trimestral para concelhos com mais de 100 mil habitantes; para Valongo publica apenas o trimestre mais recente, por isso o histórico de Valongo vai sendo acumulado pela página a cada trimestre novo.
     Uma tarefa automática no GitHub copia estes dados do INE todos os dias.
     Fonte: <a href="https://www.ine.pt/xportal/xmain?xpid=INE&xpgid=ine_destaques&DESTAQUESdest_boui=800184186" target="_blank" rel="noopener">INE, Estatísticas de Rendas da Habitação ao nível local</a>.`,
   series: [
@@ -1010,7 +1011,8 @@ const RENT = {
     return this.series.map(s => ({
       type: "line", label: s.label, data: d.values[s.id].slice(start, end),
       borderColor: css(s.color), backgroundColor: css(s.color),
-      borderWidth: s.bold ? 3 : 2, borderDash: s.bold ? [6, 3] : [], pointRadius: (state[this.key].data?.perYear === 1) ? 3 : 0, pointHoverRadius: 4,
+      borderWidth: s.bold ? 3 : 2, borderDash: s.bold ? [6, 3] : [],
+      pointRadius: (state[this.key].data?.perYear === 1 || d.values[s.id].filter(v => v != null).length <= 4) ? 3.5 : 0, pointHoverRadius: 4,
       tension: 0.2, spanGaps: true, hidden: !visible[s.id], order: s.bold ? 0 : 1,
     }));
   },
