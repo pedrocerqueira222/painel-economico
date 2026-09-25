@@ -2475,6 +2475,158 @@ const FAM = {
 
 /* ---------- ordem dos gráficos ---------- */
 const MODULES = [INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, FAM, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS, ETFS, CRYPTO];
+/* =====================================================================
+   PREVISÕES: FMI (World Economic Outlook) e expectativas do mercado (curva de juros do BCE)
+   ===================================================================== */
+const FC = { imf: null, yc: null, ycPromise: null };
+async function loadFC(force) {
+  try { const j = await ghJson("previsoes.json", force); FC.imf = j?.fmi || null; } catch (e) { FC.imf = null; }
+}
+// anos futuros (ou o ano em curso ainda sem dados completos) com previsão do FMI
+function imfAfter(ind, lastDataYear) {
+  const v = FC.imf?.valores?.[ind]; if (!v) return [];
+  const now = new Date().getFullYear();
+  return Object.keys(v).map(Number).filter(y => y > lastDataYear && y >= now && y <= now + 4).sort().map(y => [y, v[y]]);
+}
+const imfNote = () => FC.imf ? `Previsões: ${FC.imf.fonte}${FC.imf.obtido ? ", obtidas a " + dayLabel(FC.imf.obtido) : ""}.` : "";
+const fcList = (pairs, d = 1, unit = "%") => pairs.map(([y, v]) => `${fmt(v, d)}${unit} em ${y}`).join(pairs.length > 2 ? "; " : " e ").replace(/; ([^;]*)$/, " e $1");
+
+// curva de juros do BCE: taxas forward instantâneas (obrigações AAA da zona euro) de 3 meses a 2 anos
+function getYC() {
+  if (FC.ycPromise) return FC.ycPromise;
+  const hs = ["3M", "6M", "9M", "1Y", "1Y3M", "1Y6M", "1Y9M", "2Y"];
+  FC.ycPromise = getCSV(ECB + "YC/B.U2.EUR.4F.G_N_A.SV_C_YM." + hs.map(h => "IF_" + h).join("+") + "?format=csvdata&lastNObservations=1")
+    .then(rows => {
+      const pts = [], date = rows.map(r => r.t).sort().pop();
+      for (const r of rows) {
+        const m = r.key.match(/IF_(?:(\d+)Y)?(?:(\d+)M)?$/); if (!m || r.v == null) continue;
+        pts.push({ months: (+(m[1] || 0)) * 12 + (+(m[2] || 0)), v: r.v });
+      }
+      pts.sort((a, b) => a.months - b.months);
+      FC.yc = pts.length ? { date, pts } : null;
+      return FC.yc;
+    }).catch(() => (FC.yc = null));
+  return FC.ycPromise;
+}
+// taxa de curto prazo esperada daqui a h meses, ancorada na taxa do BCE atual
+function expectedRate(dfrNow, h) {
+  const p = FC.yc?.pts; if (!p?.length) return null;
+  const base = p[0].v;
+  let lo = p[0], hi = p[p.length - 1];
+  for (let k = 0; k < p.length - 1; k++) if (p[k].months <= h && p[k + 1].months >= h) { lo = p[k]; hi = p[k + 1]; }
+  const v = h <= lo.months ? lo.v : h >= hi.months ? hi.v : lo.v + (hi.v - lo.v) * (h - lo.months) / (hi.months - lo.months);
+  return dfrNow + (v - base);
+}
+const ycNote = () => FC.yc ? `Expectativas do mercado: estimativa feita pela página a partir da curva de juros do BCE de ${dayLabel(FC.yc.date)} (obrigações AAA da zona euro); não é uma previsão oficial.` : "";
+const addMonths = (m, n) => { let [y, mo] = m.split("-").map(Number); mo += n; while (mo > 12) { mo -= 12; y++; } return y + "-" + String(mo).padStart(2, "0"); };
+
+// --- Inflação vs salários: inflação prevista (FMI)
+INFWAGE.fc = function (cd) {
+  const last = cd.periods[cd.periods.length - 1]; if (!last) return null;
+  const pairs = imfAfter("PCPIPCH", +last.slice(0, 4) - 1); if (!pairs.length) return null;
+  const map = {}; pairs.forEach(([y, v]) => map[y + "-12"] = v);
+  return { periods: monthsBetween(addMonths(last, 1), pairs[pairs.length - 1][0] + "-12"),
+           sets: [{ label: "Inflação prevista (FMI, média do ano)", color: "--inf", map, follows: "INF", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: inflação ${fmt(v, 1)}%` }] };
+};
+// --- PIB e desemprego (FMI)
+GDPUNE.fc = function (cd) {
+  const last = cd.periods[cd.periods.length - 1]; if (!last) return null;
+  const g = imfAfter("NGDP_RPCH", +last.slice(0, 4) - 1), u = imfAfter("LUR", +last.slice(0, 4) - 1);
+  if (!g.length && !u.length) return null;
+  const mg = {}, mu = {}; g.forEach(([y, v]) => mg[y + "-12"] = v); u.forEach(([y, v]) => mu[y + "-12"] = v);
+  const endY = Math.max(...[...g, ...u].map(x => x[0]));
+  return { periods: monthsBetween(addMonths(last, 1), endY + "-12"), sets: [
+    { label: "PIB previsto (FMI)", color: "--gdp", map: mg, follows: "GDP", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: PIB ${sign(v)}${fmt(Math.abs(v), 1)}%` },
+    { label: "Desemprego previsto (FMI)", color: "--une", map: mu, follows: "UNE", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: desemprego ${fmt(v, 1)}%` }] };
+};
+// --- Contas com o exterior (FMI)
+TRADE.fc = function (cd) {
+  const last = cd.periods[cd.periods.length - 1]; if (!last) return null;
+  const c = imfAfter("BCA_NGDPD", +last.slice(0, 4) - (last.endsWith("Q4") ? 0 : 1)); if (!c.length) return null;
+  const map = {}; c.forEach(([y, v]) => map[y + "-Q4"] = v);
+  const per = []; let q = last; while (q < c[c.length - 1][0] + "-Q4") { let [y, t] = q.split("-Q").map(Number); t++; if (t > 4) { t = 1; y++; } q = y + "-Q" + t; per.push(q); }
+  return { periods: per, sets: [{ label: "Balança corrente prevista (FMI)", color: "--ca", map, follows: "CA", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: balança corrente ${sign(v)}${fmt(Math.abs(v), 1)}% do PIB` }] };
+};
+// --- Dívida pública e défice (FMI)
+GOV.fc = function (cd) {
+  const last = cd.periods[cd.periods.length - 1]; if (!last) return null;
+  const ly = +last.slice(0, 4) - (last.endsWith("Q4") ? 0 : 1);
+  const dbt = imfAfter("GGXWDG_NGDP", ly), bal = imfAfter("GGXCNL_NGDP", ly); if (!dbt.length && !bal.length) return null;
+  const md = {}, mb = {}; dbt.forEach(([y, v]) => md[y + "-Q4"] = v); bal.forEach(([y, v]) => mb[y + "-Q4"] = v);
+  const endY = Math.max(...[...dbt, ...bal].map(x => x[0]));
+  const per = []; let q = last; while (q < endY + "-Q4") { let [y, t] = q.split("-Q").map(Number); t++; if (t > 4) { t = 1; y++; } q = y + "-Q" + t; per.push(q); }
+  return { periods: per, sets: [
+    { label: "Dívida prevista (FMI)", color: "--debt", map: md, follows: "DEBT", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: dívida ${fmt(v, 1)}% do PIB` },
+    { label: "Saldo previsto (FMI)", color: "--ratio", map: mb, follows: "BAL", yAxisID: "y2", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: saldo ${sign(v)}${fmt(Math.abs(v), 1)}% do PIB` }] };
+};
+// --- BCE vs Euribor: expectativas do mercado
+BCEEUR.fc = function (cd) {
+  const B = cd.values.BCE, E = cd.values.E12, iB = lastIdx(B), iE = lastIdx(E);
+  if (iB < 0 || !FC.yc) return null;
+  const last = cd.periods[cd.periods.length - 1], dfr = B[iB], gap = iE >= 0 ? E[iE] - B[iB] : null;
+  const mb = {}, me = {};
+  mb[cd.periods[iB]] = dfr; if (gap != null) me[cd.periods[iE]] = E[iE];
+  for (let h = 3; h <= 24; h += 3) { const r = expectedRate(dfr, h); if (r == null) continue; const p = addMonths(cd.periods[iB], h); mb[p] = r; if (gap != null) me[p] = r + gap; }
+  return { periods: monthsBetween(addMonths(last, 1), addMonths(cd.periods[iB], 24)), sets: [
+    { label: "Taxa BCE esperada (mercado)", color: "--bce", map: mb, follows: "BCE", tip: (p, v) => ` Mercado espera BCE em ${monthLabel(p)}: ${fmt(v, 2)}%` },
+    { label: "Euribor 12M esperada (mercado)", color: "--m12", map: me, follows: "E12", tip: (p, v) => ` Mercado espera Euribor 12M em ${monthLabel(p)}: ${fmt(v, 2)}%` }] };
+};
+// --- Juros dos novos créditos: com a Euribor esperada
+MRATE.fc = function (cd) {
+  const T = cd.values.TAXA, E = cd.values.E12, i = lastIdx(T); if (i < 0 || !FC.yc) return null;
+  const bceData = state.bceeur?.data; if (!bceData) return null;
+  const dfr = bceData.values.BCE[lastIdx(bceData.values.BCE)];
+  const map = { [cd.periods[i]]: T[i] }, e0 = expectedRate(dfr, 0) ?? dfr;
+  for (let h = 3; h <= 24; h += 3) { const r = expectedRate(dfr, h); if (r != null) map[addMonths(cd.periods[i], h)] = T[i] + (r - e0); }
+  return { periods: monthsBetween(addMonths(cd.periods[cd.periods.length - 1], 1), addMonths(cd.periods[i], 24)),
+           sets: [{ label: "Taxa esperada (mercado)", color: "--l200", map, follows: "TAXA", tip: (p, v) => ` Esperado em ${monthLabel(p)}: ${fmt(v, 2)}%` }] };
+};
+// --- Prestação: com a Euribor esperada
+MORT.fc = function (cd) {
+  const tax = cd.values.TAX, i = lastIdx(tax); if (i < 0 || !FC.yc) return null;
+  const bceData = state.bceeur?.data; if (!bceData) return null;
+  const dfr = bceData.values.BCE[lastIdx(bceData.values.BCE)], e0 = expectedRate(dfr, 0) ?? dfr;
+  const m2 = { [cd.periods[i]]: cd.values.L200[i] }, m1 = { [cd.periods[i]]: cd.values.L100[i] };
+  for (let h = 3; h <= 24; h += 3) { const r = expectedRate(dfr, h); if (r == null) continue; const t = Math.max(tax[i] + (r - e0), 0), p = addMonths(cd.periods[i], h);
+    m2[p] = this.payment(200000, t); m1[p] = this.payment(100000, t); }
+  return { periods: monthsBetween(addMonths(cd.periods[cd.periods.length - 1], 1), addMonths(cd.periods[i], 24)), sets: [
+    { label: "Prestação esperada · 200 000 €", color: "--l200", map: m2, follows: "L200", tip: (p, v) => ` Esperado em ${monthLabel(p)} (200 000 €): ${fmt(Math.round(v), 0)} €/mês` },
+    { label: "Prestação esperada · 100 000 €", color: "--l100", map: m1, follows: "L100", tip: (p, v) => ` Esperado em ${monthLabel(p)} (100 000 €): ${fmt(Math.round(v), 0)} €/mês` }] };
+};
+
+// frases de previsão nos comentários
+function withFcSentence(m, fn) {
+  const orig = m.verdict;
+  m.verdict = function (d) { const v = orig.call(this, d); try { const x = fn.call(this, d); if (x && v.msg) v.msg += " " + x; else if (x) v.msg = x; } catch (e) {} return v; };
+}
+withFcSentence(INFWAGE, d => { const ly = +(Object.keys(d.monthly).sort().pop() || "0").slice(0, 4) - 1; const p = imfAfter("PCPIPCH", ly); return p.length ? `O FMI prevê inflação média de ${fcList(p.slice(0, 3))}.` : ""; });
+withFcSentence(GDPUNE, d => { const q = d.periods[d.periods.length - 1] || "0"; const ly = +q.slice(0, 4) - 1; const g = imfAfter("NGDP_RPCH", ly).slice(0, 2), u = imfAfter("LUR", ly).slice(0, 2);
+  return g.length ? `O FMI prevê crescimento do PIB de ${fcList(g)}` + (u.length ? `, com desemprego de ${fcList(u)}.` : ".") : ""; });
+withFcSentence(TRADE, d => { const q = d.periods[d.periods.length - 1] || "0"; const c = imfAfter("BCA_NGDPD", +q.slice(0, 4) - (q.endsWith("Q4") ? 0 : 1)).slice(0, 2);
+  return c.length ? `O FMI prevê uma balança corrente de ${c.map(([y, v], k) => `${sign(v)}${fmt(Math.abs(v), 1)}%${k === 0 ? " do PIB" : ""} em ${y}`).join(" e ")}.` : ""; });
+withFcSentence(GOV, d => {
+  const q = d.periods[d.periods.length - 1] || "0", ly = +q.slice(0, 4) - (q.endsWith("Q4") ? 0 : 1);
+  const dd = imfAfter("GGXWDG_NGDP", ly), bb = imfAfter("GGXCNL_NGDP", ly); if (!dd.length) return "";
+  const y = dd[Math.min(1, dd.length - 1)], b = bb.find(x => x[0] === y[0]), now = d.values.DEBT[lastIdx(d.values.DEBT)];
+  const verbo = now == null ? "fique em" : y[1] < now - 0.5 ? "desça para" : y[1] > now + 0.5 ? "suba para" : "fique em";
+  return `O FMI prevê que a dívida ${verbo} ${fmt(y[1], 0)}% do PIB em ${y[0]}` + (b ? `, com um saldo orçamental de ${sign(b[1])}${fmt(Math.abs(b[1]), 1)}%.` : ".");
+});
+withFcSentence(BCEEUR, d => { const B = d.values.BCE, i = lastIdx(B); if (i < 0 || !FC.yc) return "";
+  const r12 = expectedRate(B[i], 12), r24 = expectedRate(B[i], 24); if (r12 == null) return "";
+  const E = d.values.E12, iE = lastIdx(E), gap = iE >= 0 ? E[iE] - B[i] : 0;
+  return `Pela curva de juros, o mercado espera a taxa do BCE em cerca de ${fmt(r12, 2)}% daqui a um ano${r24 != null ? ` e ${fmt(r24, 2)}% daqui a dois` : ""}, o que poria a Euribor a 12 meses perto de ${fmt(r12 + gap, 2)}%.`; });
+withFcSentence(MORT, function (d) { const v = this.calc(d), i = lastIdx(v.TAX); const b = state.bceeur?.data; if (i < 0 || !FC.yc || !b) return "";
+  const dfr = b.values.BCE[lastIdx(b.values.BCE)], e0 = expectedRate(dfr, 0) ?? dfr, r = expectedRate(dfr, 12); if (r == null) return "";
+  const p = this.payment(200000, Math.max(v.TAX[i] + (r - e0), 0)), dp = p - v.L200[i];
+  return `Com as expectativas do mercado, daqui a um ano a prestação de 200 000 € seria de cerca de ${fmt(Math.round(p), 0)} € (${Math.abs(dp) < 1 ? "igual" : (dp > 0 ? "mais " : "menos ") + fmt(Math.abs(Math.round(dp)), 0) + " €"}).`; });
+withFcSentence(MRATE, d => { const T = d.values.TAXA, i = lastIdx(T), b = state.bceeur?.data; if (i < 0 || !FC.yc || !b) return "";
+  const dfr = b.values.BCE[lastIdx(b.values.BCE)], e0 = expectedRate(dfr, 0) ?? dfr, r = expectedRate(dfr, 12); if (r == null) return "";
+  return `Se as expectativas do mercado se confirmarem, a taxa dos novos créditos rondará ${fmt(T[i] + (r - e0), 2)}% daqui a um ano.`; });
+
+// notas das fontes das previsões
+for (const [m, note] of [[INFWAGE, imfNote], [GDPUNE, imfNote], [TRADE, imfNote], [GOV, imfNote], [BCEEUR, ycNote], [MRATE, ycNote], [MORT, ycNote]]) m.fcNote = note;
+// os três gráficos com expectativas do mercado precisam da curva de juros
+for (const m of [BCEEUR, MRATE, MORT]) { const orig = m.load; m.load = async function (...a) { const [r] = await Promise.all([orig.apply(this, a), getYC()]); return r; }; }
 
 /* ---------- construção e desenho genéricos ---------- */
 const state = {};
@@ -2493,7 +2645,7 @@ function build() {
         ${[1, 3, 5, 10, 0].map(y => `<button data-y="${y}" aria-pressed="${y === m.defaultYears}">${y ? y + (y === 1 ? " ano" : " anos") : "Tudo"}</button>`).join("")}
       </div>
       <div class="chart"><canvas aria-label="Gráfico: ${m.title}"></canvas><div class="msg">A obter dados${m.sourceName ? " do " + m.sourceName : " do Banco Central Europeu"}…</div></div>
-      <p class="src">${m.source}</p>
+      <p class="src">${m.source}</p><p class="src fcnote" hidden></p>
       <p class="src err" hidden></p>
       </div>`;
     $(m.container || "modules").appendChild(el);
@@ -2545,6 +2697,7 @@ function render(m) {
     st.els.verdict.style.setProperty("--vc", v.color);
     st.els.verdict.querySelector(".headline").innerHTML = '<span class="mark" aria-hidden="true"></span>' + v.text;
     st.els.verdict.querySelector("p").textContent = v.msg;
+    const fn = st.els.module.querySelector(".fcnote"); if (fn) { const t = m.fcNote ? m.fcNote() : ""; fn.hidden = !t; fn.textContent = t; }
     st.els.peek.style.setProperty("--vc", v.color);
     st.els.peek.innerHTML = '<span class="dot"></span>' + v.text;
 
@@ -2563,19 +2716,35 @@ function render(m) {
     }
 
     // gráfico
-    const cd = m.chartData ? m.chartData(d) : { periods: d.periods, values: d.values };
+    let cd = m.chartData ? m.chartData(d) : { periods: d.periods, values: d.values };
     const perYear = m.chartPerYear || m.perYear, labelFn = m.chartLabel || m.label;
     let nowIdx = -1;
     for (const id in cd.values) nowIdx = Math.max(nowIdx, lastIdx(cd.values[id]));
-    const end = nowIdx + 1;
+    let end = nowIdx + 1;
     let start = st.years ? Math.max(0, end - st.years * perYear) : 0;
+    // previsões (FMI / mercado): prolongam o eixo para a frente
+    let fcSets = [];
+    const fcr = m.fc ? (() => { try { return m.fc(cd); } catch (e) { console.warn(m.key, e); return null; } })() : null;
+    if (fcr && fcr.sets?.length) {
+      const lastP = cd.periods[cd.periods.length - 1];
+      const add = fcr.periods.filter(p => p > lastP);
+      if (add.length) cd = { periods: cd.periods.concat(add), values: Object.fromEntries(Object.entries(cd.values).map(([k, a]) => [k, a.concat(add.map(() => null))])) };
+      fcSets = fcr.sets;
+      end = cd.periods.length;
+    }
     if (st.years && m.byDate && end > 0) { const cut = diasAntes(cd.periods[end - 1], Math.round(st.years * 365.25)); start = cd.periods.findIndex(p => p >= cut); if (start < 0) start = 0; }
     const grid = css("--line"), muted = css("--muted"), ink = css("--ink"), surface = css("--surface");
     st.els.msg.hidden = true;
     if (st.chart) st.chart.destroy();
     st.chart = new Chart(st.els.canvas, {
       type: "line",
-      data: { labels: cd.periods.slice(start, end).map(labelFn), datasets: m.datasets(cd, start, end, st.visible) },
+      data: { labels: cd.periods.slice(start, end).map(labelFn), datasets: m.datasets(cd, start, end, st.visible).concat(fcSets.map(fs => ({
+        type: "line", label: fs.label, fcTip: fs.tip, fcPeriods: cd.periods.slice(start, end),
+        data: cd.periods.slice(start, end).map(p => fs.map[p] ?? null), yAxisID: fs.yAxisID || "y",
+        hidden: fs.follows ? !st.visible[fs.follows] : false,
+        borderColor: css(fs.color), backgroundColor: css("--surface"), borderWidth: 2, borderDash: [3, 3],
+        pointRadius: 3.5, pointBorderWidth: 2, pointHoverRadius: 5, spanGaps: true, tension: 0, order: 0,
+      }))) },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: "index", intersect: false },
@@ -2584,7 +2753,7 @@ function render(m) {
           tooltip: {
             backgroundColor: surface, titleColor: ink, bodyColor: ink, borderColor: grid, borderWidth: 1,
             padding: 10, boxPadding: 4, usePointStyle: true,
-            callbacks: { label: c => m.tooltip(m.series[c.datasetIndex], c.parsed.y) },
+            callbacks: { label: c => c.dataset.fcTip ? c.dataset.fcTip(c.dataset.fcPeriods[c.dataIndex], c.parsed.y) : m.tooltip(m.series[c.datasetIndex], c.parsed.y) },
           },
         },
         scales: {
@@ -2644,6 +2813,7 @@ function updateStatus() {
   else { $("dot").className = "dot err"; $("statusText").textContent = "Atualizado em parte: ver avisos a vermelho"; }
 }
 async function loadAll(force = false) {
+  loadFC(force).then(() => MODULES.filter(m => m.fc && state[m.key].data).forEach(render));
   lastLoad = Date.now();
   $("dot").className = "dot busy";
   $("statusText").textContent = "A atualizar…";

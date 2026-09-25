@@ -93,6 +93,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
     ├── transacoes.json                 # casas vendidas
     ├── migracao.json                   # imigrantes e emigrantes
     ├── mercados.json                   # petróleo, gás, ouro, prata, bolsas, câmbio e combustíveis
+    ├── previsoes.json                  # previsões do FMI para Portugal
     ├── estado.json                     # quando foi a última ida ao INE com sucesso
     └── verificado.txt                  # registo mensal (mantém a tarefa ativa)
 ```
@@ -105,6 +106,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
 |---|---|
 | [BCE Data Portal](https://data.ecb.europa.eu) | Euribor e taxas oficiais (FM), inflação (HICP), contas nacionais (MNA), desemprego (LFSI), preços da habitação (RESR), crédito novo (MIR), balança de pagamentos (BP6), juros de longo prazo (IRS), finanças públicas (GFS), contas das famílias (QSA) |
 | [INE](https://www.ine.pt) | Preço mediano das casas vendidas por concelho (0012234), rendas de novos contratos, fogos licenciados e concluídos (0012778), vendas de alojamentos |
+| [FMI – World Economic Outlook](https://www.imf.org/external/datamapper) | Previsões para Portugal: inflação, PIB, desemprego, balança corrente, dívida e saldo orçamental |
 | [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz) e emigração (migr_emi1ctz) |
 | [Comissão Europeia – Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en) | Preço médio da gasolina 95 e do gasóleo em Portugal, com impostos |
 | Yahoo Finance / Stooq | Brent, gás TTF, ouro, prata, PSI, Euro Stoxx 50, S&P 500, Nasdaq, MSCI World, IWDA, EUNL, bitcoin, ethereum (dados de mercado, **não oficiais**) |
@@ -155,5 +157,6 @@ Entrar na pasta certa **antes** de carregar em *Add file → Upload files*. Evit
 - A prestação do crédito é uma estimativa. Não inclui seguros, comissões nem imposto do selo.
 - A comparação entre construção e população usa uma média de 2,5 pessoas por casa.
 - Os dados de mercado (Yahoo Finance / Stooq) não são estatísticas oficiais: são preços de fecho do dia útil anterior, sem tempo real, e as bolsas não incluem dividendos. Nada no painel é uma recomendação de investimento.
+- **Previsões nos gráficos** (a tracejado, com pontos): Inflação vs salários, PIB e desemprego, Contas com o exterior e Dívida pública usam as previsões do **FMI** (World Economic Outlook, abril e outubro), que a tarefa do GitHub vai buscar sozinha para `dados/previsoes.json`. BCE vs Euribor, Juros do crédito e Prestação do crédito usam as **expectativas do mercado**, estimadas pela página a partir da curva de juros do BCE (obrigações AAA da zona euro): são uma estimativa, não uma previsão oficial. Os gráficos sem previsões credíveis publicadas (preços e rendas por concelho, bolsas, ouro, criptomoedas, etc.) não têm previsões.
 - As previsões do preço das casas (gráfico "Valor das casas em Portugal") são os únicos valores fixos do painel: têm de ser atualizadas à mão quando sai um relatório novo. A página avisa quando já têm vários meses.
 - A "sobrevalorização" das casas é uma estimativa simples (tendência linear dos preços reais) e não o modelo oficial do Banco de Portugal.
