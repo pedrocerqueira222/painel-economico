@@ -10,6 +10,7 @@ Vai buscar ao INE, para Portugal e 5 concelhos:
   - mercados: petróleo, gás, ouro, prata, bolsas (Yahoo Finance / Stooq) e combustíveis em Portugal
     (boletim semanal da Comissão Europeia) -> dados/mercados.json  [a cada corrida, sem a regra das 20 h]
   - previsões do FMI para Portugal (World Economic Outlook) -> dados/previsoes.json
+  - inflação medida pelo IPC (BPstat, Banco de Portugal) -> dados/ipc.json  [a cada corrida]
 Corre todos os dias no GitHub (ver .github/workflows).
 
 Só usa a biblioteca padrão do Python: não é preciso instalar nada.
@@ -991,6 +992,55 @@ def atualizar_previsoes(hoje: datetime) -> bool:
 
 
 
+# ================================================================ IPC (BPstat, Banco de Portugal)
+IPC = os.path.join(PASTA, "ipc.json")
+BPSTAT_URL = os.environ.get("BPSTAT_URL", "https://bpstat.bportugal.pt/data/v1")
+IPC_SERIE = 5721524  # IPC total, taxa de variação homóloga, mensal (dados do INE)
+
+
+def bpstat(caminho: str):
+    req = urllib.request.Request(BPSTAT_URL + caminho, headers={**CABECALHOS, "Accept": "application/json"})
+    return json.loads(ler_url(req, limite=60).decode("utf-8"))
+
+
+def jsonstat_mensal(j: dict) -> dict:
+    ids = j.get("id") or list((j.get("dimension") or {}).keys())
+    dims = j["dimension"]
+    tam = j.get("size") or [len(dims[d]["category"]["index"]) for d in ids]
+    ti = next(k for k, d in enumerate(ids) if re.search(r"date|time|period", d, re.I))
+    idx = dims[ids[ti]]["category"]["index"]
+    datas = idx if isinstance(idx, list) else sorted(idx, key=idx.get)
+    passo = 1
+    for t in tam[ti + 1:]:
+        passo *= t
+    val = j.get("value") or []
+    pares = enumerate(val) if isinstance(val, list) else ((int(k), v) for k, v in val.items())
+    out = {}
+    for k, v in pares:
+        if v is None:
+            continue
+        m = str(datas[(k // passo) % tam[ti]])[:7]
+        if re.match(r"^\d{4}-\d{2}$", m) and m not in out:
+            out[m] = round(float(v), 2)
+    return out
+
+
+def atualizar_ipc(hoje: datetime) -> bool:
+    try:
+        meta = bpstat(f"/series/?lang=PT&series_ids={IPC_SERIE}")[0]
+        j = bpstat(f"/domains/{meta['domain_ids'][0]}/datasets/{meta['dataset_id']}/?lang=PT&series_ids={IPC_SERIE}&obs_since=2000-01-01")
+        serie = jsonstat_mensal(j)
+    except Exception as e:
+        print(f"IPC (BPstat): falhou ({e})", file=sys.stderr)
+        return False
+    if not serie:
+        print("IPC (BPstat): sem valores.", file=sys.stderr)
+        return False
+    print(f"IPC (BPstat): {min(serie)}–{max(serie)}, último {serie[max(serie)]}%")
+    return gravar_simples(IPC, {"IPC": serie}, {"fonte": "BPstat (Banco de Portugal), IPC do INE, taxa de variação homóloga",
+                                              "serie": IPC_SERIE, "frequencia": "mensal"}, hoje)
+
+
 def ine_acessivel() -> bool:
     # a tarefa corre de hora a hora: basta insistir um pouco em cada corrida
     for n in range(6):
@@ -1028,6 +1078,10 @@ def main() -> int:
     except Exception as e:
         print(f"Mercados: erro inesperado ({e})", file=sys.stderr)
         ok_mercados = False
+    try:  # o IPC vem do BPstat, não do INE: atualiza em todas as corridas
+        ok_mercados = atualizar_ipc(hoje) or ok_mercados
+    except Exception as e:
+        print(f"IPC: erro inesperado ({e})", file=sys.stderr)
     ultima = estado.get("ultima_ida_ao_ine")
     if ultima and not forcar:
         try:
