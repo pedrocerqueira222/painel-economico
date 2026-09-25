@@ -34,15 +34,19 @@ jobs:
         run: |
           git config user.name "atualizador"
           git config user.email "atualizador@users.noreply.github.com"
+          # guardar os ficheiros desta corrida e pô-los por cima da versão mais recente do repositório
+          mkdir -p /tmp/novos && cp -r dados/. /tmp/novos/ 2>/dev/null || true
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p dados && cp -r /tmp/novos/. dados/ 2>/dev/null || true
           # uma vez por mês regista a verificação: o GitHub desliga tarefas de repositórios parados há 60 dias
           if [ "$(date +%d)" = "01" ] || [ ! -f dados/verificado.txt ]; then
-            mkdir -p dados && date -u +"Última verificação: %Y-%m-%d %H:%M UTC" > dados/verificado.txt
+            date -u +"Última verificação: %Y-%m-%d %H:%M UTC" > dados/verificado.txt
           fi
           git add dados/
           if git diff --cached --quiet; then
             echo "Sem dados novos."
           else
-            git commit -m "Preço das casas: dados atualizados do INE" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-            git pull --rebase --autostash || true
-            git push
+            git commit -m "Dados atualizados (INE e Eurostat)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+            git push origin HEAD:main
           fi
