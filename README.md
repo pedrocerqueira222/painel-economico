@@ -46,14 +46,15 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 │   BCE (Data Portal)  │ ─────────────────────────────────────┐
 └──────────────────────┘                                      ▼
                                                      ┌─────────────────┐
-┌──────────────────────┐   todos os dias às 7h UTC   │                 │
+┌──────────────────────┐    de hora a hora, até      │                 │
+│                      │    conseguir (1× por dia)   │                 │
 │ INE  ·  Eurostat     │ ──► tarefa do GitHub ──►    │   index.html    │
 └──────────────────────┘     (dados/*.json)  ─────►  │  (GitHub Pages) │
                                                      └─────────────────┘
 ```
 
 - **Dados do BCE** (Euribor, taxas do BCE, inflação, PIB, desemprego, salários, consumo, investimento, comércio externo, balança corrente, índice de preços da habitação, crédito): a página vai buscá-los diretamente ao BCE sempre que é aberta.
-- **Dados do INE e do Eurostat** (preços e rendas por concelho, construção, vendas, migração): o INE não deixa uma página no browser ler os dados diretamente, e é lento a responder. Por isso, uma tarefa automática do GitHub vai buscá-los uma vez por dia e guarda-os na pasta `dados/`. A página lê esses ficheiros, que carregam logo.
+- **Dados do INE e do Eurostat** (preços e rendas por concelho, construção, vendas, migração): o INE não deixa uma página no browser ler os dados diretamente, e é lento a responder. Por isso, uma tarefa automática do GitHub tenta ir buscá-los de hora a hora, até o INE responder. Quando consegue, não volta a pedir dados ao INE nas 20 horas seguintes, para não o sobrecarregar. Os dados ficam guardados na pasta `dados/`. A página lê esses ficheiros, que carregam logo.
 
 Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servidor.
 
@@ -73,6 +74,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
     ├── construcao.json                 # fogos licenciados e concluídos
     ├── transacoes.json                 # casas vendidas
     ├── migracao.json                   # imigrantes e emigrantes
+    ├── estado.json                     # quando foi a última ida ao INE com sucesso
     └── verificado.txt                  # registo mensal (mantém a tarefa ativa)
 ```
 
@@ -97,7 +99,7 @@ Cada gráfico tem por baixo uma nota com a definição exata dos dados e a sua o
 **No dia a dia não é preciso fazer nada.** É só abrir o endereço do painel.
 
 **Forçar uma atualização dos dados do INE e do Eurostat:**
-**Actions** → *Atualizar preço das casas* → **Run workflow**.
+**Actions** → *Atualizar preço das casas* → **Run workflow**. As corridas à mão vão sempre ao INE, mesmo que já tenha sido contactado nesse dia.
 
 **Alterar a página:**
 substituir o `index.html` na raiz do repositório (**Add file → Upload files**). Os dados não se perdem. Depois de 1 a 2 minutos, recarregar o painel com **Ctrl + F5**.
@@ -116,7 +118,8 @@ Entrar na pasta certa **antes** de carregar em *Add file → Upload files*. Evit
 |---|---|---|
 | Aviso a vermelho por baixo de um gráfico | Uma fonte não respondeu. O gráfico mostra os últimos dados guardados | Normalmente resolve-se sozinho. Carregar em *Atualizar* no gráfico |
 | "Os dados ainda não existem no GitHub" | A tarefa ainda não conseguiu ir buscar esses dados ao INE | Correr a tarefa à mão (ver acima) ou esperar pelo dia seguinte |
-| Na tarefa: "O INE não está acessível a partir do GitHub" | O INE não respondeu nesse dia | Nada. Os dados ficam como estavam e a tarefa tenta de novo no dia seguinte |
+| Na tarefa: "O INE não está acessível a partir do GitHub" | O INE não respondeu nessa hora | Nada. Os dados ficam como estavam e a tarefa tenta de novo na hora seguinte |
+| Na tarefa: "Nada a fazer agora" | O INE já foi contactado com sucesso nas últimas 20 horas | Nada: é o funcionamento normal |
 | O painel dá erro 404 | O GitHub Pages está desligado (acontece, por exemplo, depois de pôr o repositório privado) | **Settings → Pages** → *Deploy from a branch* → **main** / **(root)** → **Save** |
 | A página mostra a versão antiga | O browser guardou a versão anterior | **Ctrl + F5** |
 
