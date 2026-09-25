@@ -765,6 +765,10 @@ ATIVOS = {
     "sp500":     ("^GSPC",     "^spx",     "S&P 500 (EUA)",             "pontos"),
     "nasdaq":    ("^IXIC",     "^ndq",     "Nasdaq (EUA)",              "pontos"),
     "mundo":     ("URTH",      "urth.us",  "MSCI World (ETF)",          "USD"),
+    "iwda":      ("IWDA.AS",   None,       "iShares Core MSCI World (IWDA, Amesterdão)", "EUR"),
+    "eunl":      ("EUNL.DE",   None,       "iShares Core MSCI World (EUNL, Xetra)",      "EUR"),
+    "btc":       ("BTC-EUR",   None,       "Bitcoin",                   "EUR"),
+    "eth":       ("ETH-EUR",   None,       "Ethereum",                  "EUR"),
 }
 
 
@@ -792,6 +796,46 @@ def stooq(simbolo: str) -> dict:
     return {k: v for k, v in out.items() if k >= corte}
 
 
+def _data(cel):
+    if isinstance(cel, datetime):
+        return cel.strftime("%Y-%m-%d")
+    if isinstance(cel, (int, float)) and 30000 < cel < 60000:   # data do Excel como número
+        from datetime import timedelta
+        return (datetime(1899, 12, 30) + timedelta(days=float(cel))).strftime("%Y-%m-%d")
+    if isinstance(cel, str):
+        t = cel.strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}", t):
+            return t[:10]
+        m = re.match(r"^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$", t)
+        if m:
+            return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    return None
+
+
+def _num(v):
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            return float(v.replace("\xa0", "").replace(" ", "").replace(",", ""))
+        except ValueError:
+            return None
+    return None
+
+
+def _produto(txt: str):
+    t = txt.lower()
+    if re.search(r"euro.?super|euro.?95|super.?95|\b95\b|gasoline|petrol", t):
+        return "gasolina95"
+    if re.search(r"diesel|gas.?oil|gasoil|gasóleo|gazole", t) and not re.search(r"heating|chauffage|heiz", t):
+        return "gasoleo"
+    return None
+
+
+def _e_portugal(txt: str) -> bool:
+    return bool(re.search(r"(^|[^a-z])pt([^a-z]|$)|portugal", txt.lower()))
+
+
 def combustiveis() -> dict:
     """Preços médios semanais em Portugal (com impostos), €/litro, do boletim da Comissão Europeia."""
     import io
@@ -799,46 +843,59 @@ def combustiveis() -> dict:
         import openpyxl
     except ImportError:
         raise RuntimeError("falta o módulo openpyxl")
-    dados = ler_url(urllib.request.Request(BOLETIM, headers=CABECALHOS), limite=120, pausa=60)
+    dados = ler_url(urllib.request.Request(BOLETIM, headers=CABECALHOS), limite=180, pausa=60)
+    print(f"Combustíveis: ficheiro do boletim com {len(dados) // 1024} kB")
     wb = openpyxl.load_workbook(io.BytesIO(dados), read_only=True, data_only=True)
-    alvo = {"gasolina95": re.compile(r"^PT_price_with_tax_euro_?95$", re.I), "gasoleo": re.compile(r"^PT_price_with_tax_diesel$", re.I)}
-    out = {"gasolina95": {}, "gasoleo": {}}
-    for ws in wb.worksheets:
-        cols, linha_cab = {}, None
+    diagnostico = []
+    folhas = sorted(wb.worksheets, key=lambda ws: 0 if re.search(r"with.?tax|avec|mit", ws.title, re.I) else 1)
+    for ws in folhas:
+        linhas = []
         for n, row in enumerate(ws.iter_rows(values_only=True)):
-            if linha_cab is None:
-                for k, cel in enumerate(row):
-                    for nome, rx in alvo.items():
-                        if isinstance(cel, str) and rx.match(cel.strip()):
-                            cols[nome] = k
-                if cols:
-                    linha_cab = n
-                if n > 30 and linha_cab is None:
-                    break
+            linhas.append(list(row))
+            if n >= 3000:
+                break
+        # primeira linha com uma data na 1.ª coluna = início dos dados
+        ini = next((k for k, r in enumerate(linhas[:60]) if r and _data(r[0])), None)
+        if ini is None:
+            diagnostico.append(f"folha '{ws.title}': sem datas na 1.ª coluna")
+            continue
+        cab = linhas[:ini]
+        ncol = max((len(r) for r in linhas[:ini + 5]), default=0)
+        # cabeçalho de cada coluna = texto das linhas de cima (preenchendo células fundidas para a direita)
+        textos = [""] * ncol
+        for r in cab:
+            ult = ""
+            for k in range(ncol):
+                v = r[k] if k < len(r) else None
+                if v not in (None, ""):
+                    ult = str(v)
+                elif k == 0:
+                    ult = ""
+                textos[k] += " " + (str(v) if v not in (None, "") else ult)
+        cols = {}
+        for k, t in enumerate(textos):
+            if k == 0 or not _e_portugal(t):
                 continue
-            d = row[0] if row else None
-            if isinstance(d, datetime):
-                d = d.strftime("%Y-%m-%d")
-            elif isinstance(d, str) and re.match(r"^\d{4}-\d{2}-\d{2}", d.strip()):
-                d = d.strip()[:10]
-            elif isinstance(d, str) and re.match(r"^\d{2}/\d{2}/\d{4}$", d.strip()):
-                dd, mm, aa = d.strip().split("/"); d = f"{aa}-{mm}-{dd}"
-            else:
+            prod = _produto(t)
+            if prod and prod not in cols and not re.search(r"without|sans|ohne|excl", t, re.I):
+                cols[prod] = k
+        if not cols:
+            amostra = [t.strip()[:40] for t in textos if t.strip()][:8]
+            diagnostico.append(f"folha '{ws.title}': cabeçalhos {amostra}")
+            continue
+        out = {"gasolina95": {}, "gasoleo": {}}
+        for r in linhas[ini:]:
+            d = _data(r[0]) if r else None
+            if not d:
                 continue
-            for nome, k in cols.items():
-                v = row[k] if k < len(row) else None
-                if isinstance(v, str):
-                    try:
-                        v = float(v.replace(" ", "").replace(",", "."))
-                    except ValueError:
-                        v = None
-                if isinstance(v, (int, float)) and v > 0:
-                    out[nome][d] = round(v / 1000 if v > 50 else v, 4)   # o boletim vem em €/1000 litros
+            for prod, k in cols.items():
+                v = _num(r[k]) if k < len(r) else None
+                if v and v > 0:
+                    out[prod][d] = round(v / 1000 if v > 50 else v, 4)   # o boletim vem em €/1000 litros
         if any(out.values()):
-            break
-    if not any(out.values()):
-        raise RuntimeError("não encontrei as colunas de Portugal no boletim")
-    return out
+            print(f"Combustíveis: folha '{ws.title}', colunas {cols}")
+            return out
+    raise RuntimeError("não encontrei os preços de Portugal no boletim. " + " | ".join(diagnostico[:6]))
 
 
 def atualizar_mercados(hoje: datetime) -> bool:
