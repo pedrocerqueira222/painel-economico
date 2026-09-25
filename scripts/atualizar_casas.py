@@ -724,8 +724,8 @@ def atualizar_migracao(hoje: datetime) -> bool:
 
 
 def ine_acessivel() -> bool:
-    # o INE às vezes demora a "acordar" para o GitHub: insiste até 10 vezes (no máximo ~10 minutos)
-    for n in range(10):
+    # a tarefa corre de hora a hora: basta insistir um pouco em cada corrida
+    for n in range(6):
         try:
             req = urllib.request.Request(INE_URL + "?" + urllib.parse.urlencode({"op": "2", "varcd": INDICADOR, "Dim1": "X", "lang": "PT"}), headers=CABECALHOS)
             with urllib.request.urlopen(req, timeout=40) as r:
@@ -734,21 +734,46 @@ def ine_acessivel() -> bool:
         except urllib.error.HTTPError:
             return True  # respondeu, mesmo que com erro: está acessível
         except Exception as e:
-            print(f"Teste de ligação ao INE {n + 1}/10: {e}", file=sys.stderr)
+            print(f"Teste de ligação ao INE {n + 1}/6: {e}", file=sys.stderr)
             time.sleep(15)
     return False
+
+
+ESTADO = os.path.join(PASTA, "estado.json")
+HORAS_ENTRE_IDAS = 20
+
+
+def ler_estado() -> dict:
+    try:
+        with open(ESTADO, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def main() -> int:
     global INCREMENTAL
     hoje = datetime.now(timezone.utc)
+    forcar = os.environ.get("FORCAR", "").lower() in ("1", "true", "sim")
+    estado = ler_estado()
+    ultima = estado.get("ultima_ida_ao_ine")
+    if ultima and not forcar:
+        try:
+            horas = (hoje - datetime.strptime(ultima, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds() / 3600
+        except ValueError:
+            horas = 999
+        if horas < HORAS_ENTRE_IDAS:
+            print(f"Os dados do INE já foram atualizados há {horas:.0f} h ({ultima}). Nada a fazer agora; "
+                  f"volto a tentar daqui a {HORAS_ENTRE_IDAS - horas:.0f} h.")
+            return 0
     carregar_formatos()
     # se já há dados guardados, só pede os períodos mais recentes (o histórico fica no ficheiro)
     INCREMENTAL = os.path.exists(FICHEIRO)  # há dados guardados: basta pedir os períodos mais recentes
     if INCREMENTAL:
         print("Modo leve: só os períodos mais recentes (o histórico já está guardado).")
     tarefas = [atualizar_casas, atualizar_rendas, atualizar_construcao, atualizar_transacoes]
-    if not ine_acessivel():
+    ine_ok = ine_acessivel()
+    if not ine_ok:
         print("O INE não está acessível a partir do GitHub neste momento. Os dados guardados ficam como estão; "
               "a tarefa volta a tentar amanhã.", file=sys.stderr)
         tarefas = []
@@ -759,6 +784,12 @@ def main() -> int:
         except Exception as e:
             print(f"{tarefa.__name__}: erro inesperado ({e})", file=sys.stderr)
             resultados.append(False)
+    # regista que o INE foi contactado com sucesso: as próximas corridas horárias não voltam a pedir-lhe dados hoje
+    if ine_ok and any(resultados[:len(tarefas)]) and not ine_em_baixo():
+        os.makedirs(PASTA, exist_ok=True)
+        with open(ESTADO, "w", encoding="utf-8") as f:
+            json.dump({**estado, "ultima_ida_ao_ine": hoje.strftime("%Y-%m-%dT%H:%M:%SZ")}, f, ensure_ascii=False, indent=1)
+        print("INE contactado com sucesso: próxima ida ao INE daqui a", HORAS_ENTRE_IDAS, "horas.")
     return 0 if any(resultados) else 1
 
 
