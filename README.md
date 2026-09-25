@@ -23,6 +23,7 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 | Contas com o exterior | Portugal está a ganhar ou a perder dinheiro face ao exterior? | Saldo de bens e serviços e balança corrente, em % do PIB |
 | Juros da dívida: Portugal vs Alemanha | Os mercados confiam em Portugal? | Juros das obrigações a 10 anos e diferença (spread) |
 | Dívida pública e défice | As contas públicas estão a melhorar? | Dívida pública e saldo orçamental, em % do PIB |
+| Poupança e endividamento das famílias | As famílias estão mais ou menos vulneráveis? | Taxa de poupança e empréstimos em % do rendimento disponível, Portugal e zona euro |
 
 ### Habitação
 
@@ -54,8 +55,8 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 | Ouro e prata | O "porto de abrigo" está a subir? | Preço por onça em euros |
 | Euro vs dólar | O euro está a ficar mais forte ou mais fraco? | Dólares por euro (câmbio de referência do BCE) |
 | Bolsas | Como estão os mercados acionistas? | PSI, Euro Stoxx 50, S&P 500, Nasdaq e MSCI World, todos a começar em 100 |
-| ETFs MSCI World: IWDA e EUNL | Como está o ETF mais usado para investir no mundo? | Preço em € do iShares Core MSCI World em Amesterdão (IWDA) e na Xetra (EUNL) |
-| Criptomoedas | Como estão a bitcoin e o ethereum? | Preço em € e distância ao máximo |
+| MSCI World: IWDA & EUNL | Como está o ETF mais usado para investir no mundo? | Preço em € do iShares Core MSCI World em Amesterdão (IWDA) e na Xetra (EUNL) |
+| Bitcoin e Ethereum | Como estão as criptomoedas? | Preço em € e distância ao máximo |
 
 ---
 
@@ -106,7 +107,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
 
 | Fonte | Séries |
 |---|---|
-| [BCE Data Portal](https://data.ecb.europa.eu) | Euribor e taxas oficiais (FM), inflação (HICP), contas nacionais (MNA), desemprego (LFSI), preços da habitação (RESR), crédito novo (MIR), balança de pagamentos (BP6), juros de longo prazo (IRS), finanças públicas (GFS) |
+| [BCE Data Portal](https://data.ecb.europa.eu) | Euribor e taxas oficiais (FM), inflação (HICP), contas nacionais (MNA), desemprego (LFSI), preços da habitação (RESR), crédito novo (MIR), balança de pagamentos (BP6), juros de longo prazo (IRS), finanças públicas (GFS), contas das famílias (QSA) |
 | [INE](https://www.ine.pt) | Preço mediano das casas vendidas por concelho (0012234), rendas de novos contratos, fogos licenciados e concluídos (0012778), vendas de alojamentos |
 | [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz) e emigração (migr_emi1ctz) |
 | [Comissão Europeia – Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en) | Preço médio da gasolina 95 e do gasóleo em Portugal, com impostos |
