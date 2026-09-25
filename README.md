@@ -19,14 +19,20 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 | PIB e desemprego | Como estão a economia e o mercado de trabalho? | Crescimento real do PIB, taxa de desemprego mensal |
 | Consumo e investimento | O que está a sustentar a economia? | Crescimento real do consumo das famílias e do investimento |
 | Contas com o exterior | Portugal está a ganhar ou a perder dinheiro face ao exterior? | Saldo de bens e serviços e balança corrente, em % do PIB |
+| Juros da dívida: Portugal vs Alemanha | Os mercados confiam em Portugal? | Juros das obrigações a 10 anos e diferença (spread) |
+| Dívida pública e défice | As contas públicas estão a melhorar? | Dívida pública e saldo orçamental, em % do PIB |
 
 ### Habitação
 
 | Gráfico | Pergunta a que responde | Dados |
 |---|---|---|
+| Valor das casas em Portugal | Quanto subiram as casas em cada ano e quanto se prevê que subam? | Variação média anual do índice de preços da habitação, ano em curso e previsões publicadas (valores fixos) |
 | Preço das casas | Quanto custa comprar? | Preço mediano €/m² das casas vendidas: Portugal, Lisboa, Porto, Matosinhos, Maia, Valongo |
 | Preços das casas vs salários | As casas estão a ficar mais caras face aos rendimentos? | Índice de preços da habitação e índice de salários, ambos a começar em 100 |
+| As casas estão sobrevalorizadas? | Os preços estão acima do seu nível de longo prazo? | Preço real das casas (sem inflação) e tendência de longo prazo |
 | Rendas | Quanto custa arrendar e como está a evoluir? | Renda mediana €/m² dos novos contratos, nas mesmas 6 zonas |
+| Juros do crédito à habitação | Quanto cobram os bancos nos créditos novos? | Taxa média dos novos empréstimos à habitação e Euribor a 12 meses |
+| Novos créditos à habitação | As famílias estão a pedir mais ou menos crédito? | Montante de novos empréstimos por mês, média de 12 meses e renegociações |
 | Prestação do crédito à habitação | Quanto custa financiar uma casa? | Prestação de 200 000 € e 100 000 € a 30 anos, com Euribor + spread (escolhe-se no gráfico) |
 
 ### Oferta e Procura
@@ -53,7 +59,7 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
                                                      └─────────────────┘
 ```
 
-- **Dados do BCE** (Euribor, taxas do BCE, inflação, PIB, desemprego, salários, consumo, investimento, comércio externo, balança corrente, índice de preços da habitação, crédito): a página vai buscá-los diretamente ao BCE sempre que é aberta.
+- **Dados do BCE** (Euribor, taxas do BCE, inflação, PIB, desemprego, salários, consumo, investimento, comércio externo, balança corrente, juros e dívida pública, índice de preços da habitação, crédito e respetivos juros): a página vai buscá-los diretamente ao BCE sempre que é aberta.
 - **Dados do INE e do Eurostat** (preços e rendas por concelho, construção, vendas, migração): o INE não deixa uma página no browser ler os dados diretamente, e é lento a responder. Por isso, uma tarefa automática do GitHub tenta ir buscá-los de hora a hora, até o INE responder. Quando consegue, não volta a pedir dados ao INE nas 20 horas seguintes, para não o sobrecarregar. Os dados ficam guardados na pasta `dados/`. A página lê esses ficheiros, que carregam logo.
 
 Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servidor.
@@ -84,7 +90,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
 
 | Fonte | Séries |
 |---|---|
-| [BCE Data Portal](https://data.ecb.europa.eu) | Euribor e taxas oficiais (FM), inflação (HICP), contas nacionais (MNA), desemprego (LFSI), preços da habitação (RESR), crédito novo (MIR), balança de pagamentos (BP6) |
+| [BCE Data Portal](https://data.ecb.europa.eu) | Euribor e taxas oficiais (FM), inflação (HICP), contas nacionais (MNA), desemprego (LFSI), preços da habitação (RESR), crédito novo (MIR), balança de pagamentos (BP6), juros de longo prazo (IRS), finanças públicas (GFS) |
 | [INE](https://www.ine.pt) | Preço mediano das casas vendidas por concelho (0012234), rendas de novos contratos, fogos licenciados e concluídos (0012778), vendas de alojamentos |
 | [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz) e emigração (migr_emi1ctz) |
 
@@ -133,3 +139,5 @@ Entrar na pasta certa **antes** de carregar em *Add file → Upload files*. Evit
 - O "índice de salários" é a remuneração média por trabalhador das contas nacionais: inclui as contribuições do empregador e não é exatamente o salário líquido.
 - A prestação do crédito é uma estimativa. Não inclui seguros, comissões nem imposto do selo.
 - A comparação entre construção e população usa uma média de 2,5 pessoas por casa.
+- As previsões do preço das casas (gráfico "Valor das casas em Portugal") são os únicos valores fixos do painel: têm de ser atualizadas à mão quando sai um relatório novo. A página avisa quando já têm vários meses.
+- A "sobrevalorização" das casas é uma estimativa simples (tendência linear dos preços reais) e não o modelo oficial do Banco de Portugal.
