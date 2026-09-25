@@ -562,8 +562,22 @@ function loadFed(force) {
       throw new Error("o FRED não respondeu");
     };
     const parse = t => { const o = {}; t.trim().split(/\r?\n/).slice(1).forEach(l => { const [d, v] = l.split(","); const x = parseFloat(v); if (!isNaN(x)) o[d] = x; }); return o; };
-    const [hi, lo, old] = await Promise.all([csv("DFEDTARU"), csv("DFEDTARL"), csv("DFEDTAR").catch(() => "")]).then(a => a.map(parse));
-    return fedChanges(hi, lo, old);
+    try {
+      const [hi, lo, old] = await Promise.all([csv("DFEDTARU"), csv("DFEDTARL"), csv("DFEDTAR").catch(() => "")]).then(a => a.map(parse));
+      const ch = fedChanges(hi, lo, old);
+      if (ch.length) return ch;
+    } catch (e) {}
+    // alternativa: API da Reserva Federal de Nova Iorque (últimos 10 anos)
+    const y = new Date().getFullYear(), hi = {}, lo = {};
+    for (const [a, b] of [[y - 9, y - 5], [y - 4, y]]) {
+      const url = `https://markets.newyorkfed.org/api/rates/unsecured/effr/search.json?startDate=${a}-01-01&endDate=${b}-12-31`;
+      let j = null;
+      for (const r of INE_ROUTES) { try { const res = await fetchTimeout(r.wrap(url), 30000); if (res.ok) { j = await res.json(); break; } } catch (e) {} }
+      for (const x of j?.refRates || []) if (x.targetRateFrom != null && x.targetRateTo != null) { lo[x.effectiveDate] = +x.targetRateFrom; hi[x.effectiveDate] = +x.targetRateTo; }
+    }
+    const ch = fedChanges(hi, lo, {});
+    if (!ch.length) throw new Error("nem o FRED nem a Fed de Nova Iorque responderam");
+    return ch;
   })().catch(e => { fedPromise = null; throw e; });
 }
 function fedChanges(hi, lo, old) {
@@ -593,7 +607,7 @@ const BCEEUR = {
   source: `Taxa BCE: taxa da facilidade de depósito, a referência principal da política do BCE, em vigor no fim de cada mês.
     Euribor: média mensal, publicada no primeiro dia útil do mês seguinte.
     Fed: taxa de referência dos EUA (fed funds), no meio do intervalo-alvo em vigor no fim de cada mês. Não afeta diretamente a Euribor, mas o BCE costuma ir na mesma direção.
-    Fontes: <a href="https://data.ecb.europa.eu/data/datasets/FM" target="_blank" rel="noopener">BCE Data Portal</a>; Fed — <a href="https://fred.stlouisfed.org/series/DFEDTARU" target="_blank" rel="noopener">FRED, Reserva Federal de St. Louis</a>.`,
+    Fontes: <a href="https://data.ecb.europa.eu/data/datasets/FM" target="_blank" rel="noopener">BCE Data Portal</a>; Fed — <a href="https://fred.stlouisfed.org/series/DFEDTARU" target="_blank" rel="noopener">FRED</a> ou <a href="https://www.newyorkfed.org/markets/reference-rates/effr" target="_blank" rel="noopener">Fed de Nova Iorque</a>.`,
   series: [
     { id: "BCE", label: "Taxa BCE",         short: "BCE", color: "--bce", stepped: true },
     { id: "E3",  label: "Euribor 3 meses",  short: "3M",  color: "--m3",  code: "EURIBOR3MD_" },
