@@ -14,7 +14,7 @@
 <style>
   :root {
     --bg: #EEF1F4; --surface: #FFFFFF; --ink: #17202B; --muted: #5B6675; --line: #D5DBE2;
-    --bce: #17202B; --m3: #2A6CA3; --m6: #B7801A; --m12: #8A3B72;
+    --bce: #17202B; --m3: #2A6CA3; --m6: #B7801A; --m12: #8A3B72; --fed: #B23A2E; --fedgap: rgba(178,58,46,.28);
     --inf: #C0562B; --wag: #1F7A74; --real-up: rgba(46,125,79,.35); --real-down: rgba(178,58,46,.35); --real: #5B6675;
     --gdp: #3A6EA5; --gdp-up: rgba(58,110,165,.45); --gdp-down: rgba(178,58,46,.45); --une: #7A4FB0;
     --pt: #17202B; --lis: #2A6CA3; --opo: #B7801A; --maia: #1F7A74; --val: #8A3B72; --mat: #C0562B;
@@ -33,7 +33,7 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #10161D; --surface: #18212B; --ink: #E7ECF1; --muted: #9AA6B4; --line: #2B3642;
-      --bce: #E7ECF1; --m3: #6FA8DC; --m6: #E0AE4A; --m12: #CF7FB5;
+      --bce: #E7ECF1; --m3: #6FA8DC; --m6: #E0AE4A; --m12: #CF7FB5; --fed: #E57A6E; --fedgap: rgba(229,122,110,.28);
       --inf: #EE8E62; --wag: #5CC2B8; --real-up: rgba(108,194,148,.35); --real-down: rgba(229,122,110,.35); --real: #9AA6B4;
       --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
       --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
@@ -49,7 +49,7 @@
   }
   :root[data-theme="dark"] {
     --bg: #10161D; --surface: #18212B; --ink: #E7ECF1; --muted: #9AA6B4; --line: #2B3642;
-    --bce: #E7ECF1; --m3: #6FA8DC; --m6: #E0AE4A; --m12: #CF7FB5;
+    --bce: #E7ECF1; --m3: #6FA8DC; --m6: #E0AE4A; --m12: #CF7FB5; --fed: #E57A6E; --fedgap: rgba(229,122,110,.28);
     --inf: #EE8E62; --wag: #5CC2B8; --real-up: rgba(108,194,148,.35); --real-down: rgba(229,122,110,.35); --real: #9AA6B4;
     --gdp: #7FA8DA; --gdp-up: rgba(127,168,218,.45); --gdp-down: rgba(229,122,110,.45); --une: #B79BE6;
     --pt: #E7ECF1; --lis: #6FA8DC; --opo: #E0AE4A; --maia: #5CC2B8; --val: #CF7FB5; --mat: #EE8E62;
@@ -542,6 +542,47 @@ const INFWAGE = {
   yTick: v => fmt(v, 0) + "%",
 };
 
+/* ---------- taxa da Fed (EUA): ficheiro da tarefa do GitHub, ou FRED diretamente ---------- */
+// devolve os pontos em que a taxa mudou: [{ d: "AAAA-MM-DD", lo, hi, mid }], por ordem
+let fedPromise = null;
+function loadFed(force) {
+  if (fedPromise && !force) return fedPromise;
+  return fedPromise = (async () => {
+    const j = await ghJson("fed.json", force);
+    if (j?.mudancas?.datas?.length) {
+      const m = j.mudancas;
+      return m.datas.map((d, k) => ({ d, lo: m.inferior[k], hi: m.superior[k], mid: (m.inferior[k] + m.superior[k]) / 2 }));
+    }
+    // sem ficheiro: pede ao FRED (via intermediário, porque o FRED não aceita pedidos do browser)
+    const fred = id => "https://fred.stlouisfed.org/graph/fredgraph.csv?id=" + id;
+    const csv = async id => {
+      for (const r of INE_ROUTES) {
+        try { const res = await fetchTimeout(r.wrap(fred(id)), 30000); if (!res.ok) continue; const t = await res.text(); if (/^\s*(DATE|observation_date)/i.test(t)) return t; } catch (e) {}
+      }
+      throw new Error("o FRED não respondeu");
+    };
+    const parse = t => { const o = {}; t.trim().split(/\r?\n/).slice(1).forEach(l => { const [d, v] = l.split(","); const x = parseFloat(v); if (!isNaN(x)) o[d] = x; }); return o; };
+    const [hi, lo, old] = await Promise.all([csv("DFEDTARU"), csv("DFEDTARL"), csv("DFEDTAR").catch(() => "")]).then(a => a.map(parse));
+    return fedChanges(hi, lo, old);
+  })().catch(e => { fedPromise = null; throw e; });
+}
+function fedChanges(hi, lo, old) {
+  const days = [...new Set([...Object.keys(old), ...Object.keys(hi)])].sort(), out = [];
+  for (const d of days) {
+    const h = hi[d] ?? (lo[d] == null ? old[d] : null), l = lo[d] ?? (hi[d] == null ? old[d] : null);
+    if (h == null || l == null) continue;
+    const p = out[out.length - 1];
+    if (!p || p.hi !== h || p.lo !== l) out.push({ d, lo: l, hi: h, mid: (l + h) / 2 });
+  }
+  return out;
+}
+// valor em vigor em cada data (datas por ordem crescente)
+function fedAt(changes, dates, field = "mid") {
+  let j = -1;
+  return dates.map(t => { while (j + 1 < changes.length && changes[j + 1].d <= t) j++; return j >= 0 ? changes[j][field] : null; });
+}
+const fedRange = c => `${fmt(c.lo, 2)}–${fmt(c.hi, 2)}%`;
+
 /* =====================================================================
    MÓDULO 2 — BCE vs Euribor
    ===================================================================== */
@@ -551,17 +592,20 @@ const BCEEUR = {
   defaultYears: 3, perYear: 12,
   source: `Taxa BCE: taxa da facilidade de depósito, a referência principal da política do BCE, em vigor no fim de cada mês.
     Euribor: média mensal, publicada no primeiro dia útil do mês seguinte.
-    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/FM" target="_blank" rel="noopener">BCE Data Portal</a>.`,
+    Fed: taxa de referência dos EUA (fed funds), no meio do intervalo-alvo em vigor no fim de cada mês. Não afeta diretamente a Euribor, mas o BCE costuma ir na mesma direção.
+    Fontes: <a href="https://data.ecb.europa.eu/data/datasets/FM" target="_blank" rel="noopener">BCE Data Portal</a>; Fed — <a href="https://fred.stlouisfed.org/series/DFEDTARU" target="_blank" rel="noopener">FRED, Reserva Federal de St. Louis</a>.`,
   series: [
     { id: "BCE", label: "Taxa BCE",         short: "BCE", color: "--bce", stepped: true },
     { id: "E3",  label: "Euribor 3 meses",  short: "3M",  color: "--m3",  code: "EURIBOR3MD_" },
     { id: "E6",  label: "Euribor 6 meses",  short: "6M",  color: "--m6",  code: "EURIBOR6MD_" },
     { id: "E12", label: "Euribor 12 meses", short: "12M", color: "--m12", code: "EURIBOR1YD_" },
+    { id: "FED", label: "Taxa da Fed (EUA)", short: "Fed",  color: "--fed", stepped: true, off: true },
   ],
   async load(prev) {
-    const [eur, bce] = await Promise.allSettled([
+    const [eur, bce, fed] = await Promise.allSettled([
       getCSV(ECB + "FM/M.U2.EUR.RT.MM.EURIBOR3MD_+EURIBOR6MD_+EURIBOR1YD_.HSTA?format=csvdata&startPeriod=1999-01"),
       getCSV(ECB + "FM/D.U2.EUR.4F.KR.DFR.LEV?format=csvdata&startPeriod=1999-01-01"),
+      loadFed(),
     ]);
     if (eur.status === "rejected" && bce.status === "rejected") throw new Error(eur.reason.message);
     const months = monthsBetween("1999-01", thisMonth());
@@ -591,7 +635,17 @@ const BCEEUR = {
       values.BCE = align(prev?.values?.BCE);
       lastChange = prev?.lastChange ?? null;
     }
-    return { periods: months, values, lastChange, errors, fetchedAt: Date.now() };
+    let fedNow = prev?.fedNow ?? null, fedLast = prev?.fedLast ?? null;
+    if (fed.status === "fulfilled" && fed.value.length) {
+      const ch = fed.value;
+      values.FED = fedAt(ch, months.map(m => m + "-31"));
+      fedNow = ch[ch.length - 1];
+      fedLast = ch.length > 1 ? { date: fedNow.d, diff: fedNow.mid - ch[ch.length - 2].mid } : null;
+    } else {
+      if (fed.status === "rejected") errors.push("Fed: " + fed.reason.message);
+      values.FED = align(prev?.values?.FED);
+    }
+    return { periods: months, values, lastChange, fedNow, fedLast, errors, fetchedAt: Date.now() };
   },
   verdict(d) {
     const e = d.values.E12, i = lastIdx(e);
@@ -615,18 +669,25 @@ const BCEEUR = {
            : gap < -0.10 ? ` A Euribor está ${g} pontos abaixo da taxa do BCE: o mercado admite uma descida.`
            : " A Euribor está alinhada com a taxa do BCE: o mercado não espera mudanças para já.";
     }
+    const f = d.fedNow;
+    if (f && ib >= 0) {
+      const g = f.mid - b[ib];
+      msg += ` Nos EUA, a Fed tem os juros no intervalo de ${fedRange(f)}` + (Math.abs(g) < 0.13 ? ", ao nível do BCE." : `, ${fmt(Math.abs(g), 2)} pontos ${g > 0 ? "acima" : "abaixo"} do BCE.`);
+      if (d.fedLast && Math.abs(d.fedLast.diff) > 1e-9) msg += ` A última mudança foi a ${dayLabel(d.fedLast.date)} (${d.fedLast.diff < 0 ? "descida" : "subida"} de ${fmt(Math.abs(d.fedLast.diff), 2)} pontos).`;
+    }
     return { text, color, msg };
   },
   rates(d) {
     return this.series.map(s => {
       const v = d.values[s.id], i = lastIdx(v);
       let deltas;
-      if (s.id === "BCE") {
-        const c = d.lastChange;
+      if (s.id === "BCE" || s.id === "FED") {
+        const c = s.id === "BCE" ? d.lastChange : d.fedLast;
         deltas = (c ? deltaHTML(c.diff, 0, "em " + dayLabel(c.date), 2) : "") + deltaHTML(v[i], v[i - 12], "vs há um ano", 2);
+        if (s.id === "FED" && d.fedNow) deltas = `<span>intervalo ${fedRange(d.fedNow)}</span>` + deltas;
       } else deltas = deltaHTML(v[i], v[i - 1], "vs mês anterior", 3) + deltaHTML(v[i], v[i - 12], "vs há um ano", 3);
-      return { id: s.id, name: s.label + (s.id === "BCE" || i < 0 ? "" : " · " + monthLabel(d.periods[i])),
-               value: i >= 0 ? v[i] : null, d: s.id === "BCE" ? 2 : 3, unit: "%", deltas };
+      return { id: s.id, name: s.label + (s.stepped || i < 0 ? "" : " · " + monthLabel(d.periods[i])),
+               value: i >= 0 ? v[i] : null, d: s.stepped ? 2 : 3, unit: "%", deltas };
     });
   },
   datasets(d, start, end, visible) {
@@ -635,11 +696,12 @@ const BCEEUR = {
       borderColor: css(s.color), backgroundColor: css(s.color),
       borderWidth: s.stepped ? 2.75 : 2, pointRadius: 0, pointHoverRadius: 4,
       stepped: s.stepped ? "after" : false, tension: s.stepped ? 0 : 0.25,
+      borderDash: s.id === "FED" ? [6, 3] : undefined,
       spanGaps: true, hidden: !visible[s.id], order: s.stepped ? 0 : 1,
     }));
   },
   label: monthLabel,
-  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 3)}%`,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, s.stepped ? 2 : 3)}%`,
   yTick: v => fmt(v, v % 1 === 0 ? 0 : 1) + "%",
 };
 
@@ -2323,7 +2385,7 @@ const METALS = {
   yTick: v => fmt(v, 0) + " €",
 };
 
-/* ---------- Euro vs dólar (BCE) ---------- */
+/* ---------- Euro vs dólar (BCE) + diferença de juros Fed − BCE ---------- */
 const FX = {
   byDate: true,
   key: "fx", container: "modules-mkt",
@@ -2331,13 +2393,34 @@ const FX = {
   defaultYears: 3, perYear: 256,
   source: `Taxa de câmbio de referência do BCE: quantos dólares se compram com 1 euro, em cada dia útil.
     Como o petróleo, o gás e o ouro se pagam em dólares, um euro mais forte torna-os mais baratos para nós; um euro mais fraco torna-os mais caros.
-    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/EXR" target="_blank" rel="noopener">BCE Data Portal</a>.`,
-  series: [{ id: "USD", label: "Dólares por euro", short: "1 € =", color: "--m3" }],
-  async load() {
-    const rows = await getCSV(ECB + "EXR/D.USD.EUR.SP00.A?format=csvdata&startPeriod=2008-01-01");
-    const m = {}; for (const r of rows) if (r.v != null) m[r.t] = r.v;
-    const periods = Object.keys(m).sort();
-    return { periods, values: { USD: periods.map(d => m[d]) }, errors: [], fetchedAt: Date.now() };
+    Diferença de juros: taxa da Fed (meio do intervalo-alvo) menos a taxa de depósito do BCE, no eixo da direita. Quando o dólar rende mais, o dinheiro tende a ir para o dólar e o euro enfraquece; é um dos fatores que movem o câmbio, não o único.
+    Fontes: <a href="https://data.ecb.europa.eu/data/datasets/EXR" target="_blank" rel="noopener">BCE Data Portal</a>; Fed — <a href="https://fred.stlouisfed.org/series/DFEDTARU" target="_blank" rel="noopener">FRED</a>.`,
+  series: [
+    { id: "USD", label: "Dólares por euro", short: "1 € =", color: "--m3" },
+    { id: "GAP", label: "Juros: Fed menos BCE", short: "Fed − BCE", color: "--fed" },
+  ],
+  y2: { tick: v => sign(v) + fmt(Math.abs(v), 1) + " p.p." },
+  async load(prev) {
+    const [fxr, bce, fed] = await Promise.allSettled([
+      getCSV(ECB + "EXR/D.USD.EUR.SP00.A?format=csvdata&startPeriod=2008-01-01"),
+      getCSV(ECB + "FM/D.U2.EUR.4F.KR.DFR.LEV?format=csvdata&startPeriod=2007-01-01"),
+      loadFed(),
+    ]);
+    if (fxr.status === "rejected") throw new Error(fxr.reason.message);
+    const m = {}; for (const r of fxr.value) if (r.v != null) m[r.t] = r.v;
+    const periods = Object.keys(m).sort(), errors = [];
+    let GAP = periods.map(() => null), fedNow = null, bceNow = null;
+    if (bce.status === "fulfilled" && fed.status === "fulfilled" && fed.value.length) {
+      const obs = bce.value.filter(r => r.v != null).sort((x, y) => x.t < y.t ? -1 : 1).map(r => ({ d: r.t, mid: r.v }));
+      const B = fedAt(obs, periods), F = fedAt(fed.value, periods);
+      GAP = periods.map((p, k) => B[k] != null && F[k] != null ? F[k] - B[k] : null);
+      fedNow = fed.value[fed.value.length - 1]; bceNow = obs[obs.length - 1]?.mid ?? null;
+    } else {
+      if (bce.status === "rejected") errors.push("taxa BCE: " + bce.reason.message);
+      if (fed.status === "rejected") errors.push("Fed: " + fed.reason.message);
+      if (prev?.values?.GAP) { const o = {}; prev.periods.forEach((p, k) => o[p] = prev.values.GAP[k]); GAP = periods.map(p => o[p] ?? null); fedNow = prev.fedNow; bceNow = prev.bceNow; }
+    }
+    return { periods, values: { USD: periods.map(d => m[d]), GAP }, fedNow, bceNow, errors, fetchedAt: Date.now() };
   },
   verdict(d) {
     const P = d.periods, U = d.values.USD, i = lastIdx(U);
@@ -2351,18 +2434,36 @@ const FX = {
     msg += m3 >= 3 ? " Um euro mais forte embaratece o petróleo, o gás e as importações pagas em dólares, e ajuda a travar a inflação; em contrapartida, as exportações para fora da zona euro ficam mais caras."
          : m3 <= -3 ? " Um euro mais fraco encarece o petróleo, o gás e as importações pagas em dólares; em contrapartida, torna as exportações e o turismo mais competitivos."
          : " Sem grandes mudanças, o câmbio não está a pesar nos preços do petróleo e das importações.";
+    const G = d.values.GAP, j = lastIdx(G);
+    if (j >= 0) {
+      const g = G[j], g1 = valorEm(P, G, diasAntes(P[j], 365));
+      msg += Math.abs(g) < 0.13 ? " Os juros nos EUA e na zona euro estão ao mesmo nível, por isso a diferença de juros não favorece nenhuma das moedas."
+           : ` Os juros ${g > 0 ? "nos EUA" : "na zona euro"} estão ${fmt(Math.abs(g), 2)} pontos acima` + (d.fedNow && d.bceNow != null ? ` (Fed ${fedRange(d.fedNow)}, BCE ${fmt(d.bceNow, 2)}%)` : "") +
+             `: isso tende a favorecer o ${g > 0 ? "dólar" : "euro"}.`;
+      if (g1 != null && Math.abs(g - g1) >= 0.25) msg += ` Há um ano a diferença era de ${sign(g1)}${fmt(Math.abs(g1), 2)} pontos; ${Math.abs(g) < Math.abs(g1) ? "está a encurtar" : "está a alargar"}` +
+             (Math.abs(g) < Math.abs(g1) === (g1 > 0) ? ", o que costuma ajudar o euro." : ", o que costuma pesar sobre o euro.");
+    }
     return { text, color, msg };
   },
   rates(d) {
-    const P = d.periods, U = d.values.USD, i = lastIdx(U);
-    return [{ id: "USD", name: "1 euro em dólares · " + (i >= 0 ? dLabel(P[i]) : "—"), value: i >= 0 ? U[i] : null, d: 4, unit: " $",
-              deltas: deltaHTML(varDias(P, U, 91), 0, "em 3 meses", 1, true, "%") + deltaHTML(varDias(P, U, 365), 0, "num ano", 1, true, "%") }];
+    const P = d.periods, U = d.values.USD, i = lastIdx(U), G = d.values.GAP, j = lastIdx(G);
+    return [
+      { id: "USD", name: "1 euro em dólares · " + (i >= 0 ? dLabel(P[i]) : "—"), value: i >= 0 ? U[i] : null, d: 4, unit: " $",
+        deltas: deltaHTML(varDias(P, U, 91), 0, "em 3 meses", 1, true, "%") + deltaHTML(varDias(P, U, 365), 0, "num ano", 1, true, "%") },
+      { id: "GAP", name: "Juros: Fed menos BCE" + (j >= 0 ? " · " + dLabel(P[j]) : ""), value: j >= 0 ? G[j] : null, d: 2, unit: " p.p.", signed: true,
+        deltas: (d.fedNow && d.bceNow != null ? `<span>Fed ${fedRange(d.fedNow)} · BCE ${fmt(d.bceNow, 2)}%</span>` : "") +
+                (j >= 0 ? deltaHTML(G[j], valorEm(P, G, diasAntes(P[j], 365)), "vs há um ano", 2, false, " p.p.") : "") },
+    ];
   },
   datasets(d, start, end, visible) {
-    return [{ type: "line", label: "Dólares por euro", data: d.values.USD.slice(start, end), hidden: !visible.USD, borderColor: css("--m3"), backgroundColor: css("--m3"), borderWidth: 2.25, pointRadius: 0, pointHoverRadius: 4, tension: 0.1 }];
+    return [
+      { type: "line", label: "Dólares por euro", data: d.values.USD.slice(start, end), hidden: !visible.USD, borderColor: css("--m3"), backgroundColor: css("--m3"), borderWidth: 2.25, pointRadius: 0, pointHoverRadius: 4, tension: 0.1, order: 1 },
+      { type: "line", label: "Juros: Fed menos BCE", data: d.values.GAP.slice(start, end), hidden: !visible.GAP, yAxisID: "y2", stepped: "after",
+        borderColor: css("--fed"), backgroundColor: css("--fedgap"), fill: "origin", borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, spanGaps: true, order: 2 },
+    ];
   },
   label: dLabel,
-  tooltip: (s, v) => ` 1 € = ${fmt(v, 4)} $`,
+  tooltip: (s, v) => s.id === "GAP" ? ` Fed − BCE: ${sign(v)}${fmt(Math.abs(v), 2)} p.p.` : ` 1 € = ${fmt(v, 4)} $`,
   yTick: v => fmt(v, 2) + " $",
 };
 
