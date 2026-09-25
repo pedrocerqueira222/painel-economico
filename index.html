@@ -249,43 +249,109 @@ function monthsBetween(from, to) {
 const thisMonth = () => { const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0"); };
 
 /* =====================================================================
-   MÓDULO — Inflação (Portugal vs zona euro, IHPC)
+   MÓDULO — Inflação: IPC (INE) e IHPC (Eurostat), Portugal vs zona euro
    ===================================================================== */
+// IPC total, taxa de variação homóloga mensal (BPstat, Banco de Portugal, a partir do INE)
+const BPSTAT = "https://bpstat.bportugal.pt/data/v1";
+const IPC_SERIE = 5721524;
+// lê um conjunto JSON-stat do BPstat e devolve { "AAAA-MM": valor }
+function bpstatMonthly(j) {
+  const ids = j.id || Object.keys(j.dimension || {}), size = j.size || ids.map(d => Object.keys(j.dimension[d].category.index).length);
+  const ti = ids.findIndex(d => /date|time|period/i.test(d));
+  if (ti < 0) throw new Error("o BPstat devolveu dados num formato inesperado");
+  const idx = j.dimension[ids[ti]].category.index;
+  const dates = Array.isArray(idx) ? idx : Object.keys(idx).sort((x, y) => idx[x] - idx[y]);
+  let stride = 1; for (let k = ti + 1; k < size.length; k++) stride *= size[k];
+  const out = {}, val = j.value || [];
+  const put = (k, v) => { if (v == null || isNaN(+v)) return; const t = Math.floor(k / stride) % size[ti]; const m = String(dates[t]).slice(0, 7); if (/^\d{4}-\d{2}$/.test(m) && out[m] == null) out[m] = +v; };
+  if (Array.isArray(val)) val.forEach((v, k) => put(k, v)); else for (const k in val) put(+k, val[k]);
+  return out;
+}
+async function getBPstat(path) {
+  const url = BPSTAT + path, tried = [];
+  for (const r of INE_ROUTES) {
+    try {
+      const res = await fetchTimeout(r.wrap(url), r.timeout || 30000);
+      if (!res.ok) { tried.push(r.name.replace("INE direto", "BPstat direto") + ": erro " + res.status); continue; }
+      return await res.json();
+    } catch (e) { tried.push(r.name.replace("INE direto", "BPstat direto") + ": sem resposta"); }
+  }
+  throw new Error("nenhuma ligação ao BPstat funcionou — " + tried.join("; "));
+}
+async function loadIPC() {
+  // 1.º ficheiro guardado pela tarefa automática do GitHub; 2.º BPstat diretamente
+  let fromFile = null;
+  for (const u of HOUSE.githubUrls("ipc.json")) {
+    try {
+      const res = await fetchTimeout(u + "?t=" + Date.now(), 15000);
+      if (!res.ok) continue;
+      const j = await res.json();
+      if (j.periodos?.length && j.valores?.IPC) { fromFile = Object.fromEntries(j.periodos.map((p, k) => [p, j.valores.IPC[k]]).filter(([, v]) => v != null)); break; }
+    } catch (e) {}
+  }
+  const fresh = m => { if (!m) return false; const last = Object.keys(m).sort().pop(); const n = new Date(); n.setMonth(n.getMonth() - 2); return last >= n.toISOString().slice(0, 7); };
+  if (fresh(fromFile)) return fromFile;
+  try {
+    const meta = (await getBPstat(`/series/?lang=PT&series_ids=${IPC_SERIE}`))[0];
+    const j = await getBPstat(`/domains/${meta.domain_ids[0]}/datasets/${meta.dataset_id}/?lang=PT&series_ids=${IPC_SERIE}&obs_since=2000-01-01`);
+    const m = bpstatMonthly(j);
+    if (Object.keys(m).length) return fromFile ? { ...fromFile, ...m } : m;
+    throw new Error("o BPstat não devolveu valores");
+  } catch (e) { if (fromFile) return fromFile; throw e; }
+}
+
 const INFL = {
   key: "infl",
   title: "Inflação",
   defaultYears: 5, perYear: 12,
-  source: `Variação anual do índice harmonizado de preços no consumidor (IHPC), mês a mês. É o índice usado pelo BCE e pelo Eurostat; o IPC que o INE destaca nas notícias usa pesos diferentes e costuma diferir umas décimas.
-    Subjacente: exclui energia, alimentação, bebidas alcoólicas e tabaco, os preços que mais oscilam. A meta do BCE é 2% na zona euro.
-    Fonte: <a href="https://data.ecb.europa.eu/data/datasets/HICP" target="_blank" rel="noopener">BCE Data Portal</a> (dados do Eurostat).`,
+  source: `IPC: índice de preços no consumidor do INE, variação face ao mesmo mês do ano anterior. É o número que o INE destaca e que as notícias chamam "a inflação".
+    IHPC: índice harmonizado, calculado com as regras do Eurostat para comparar países; é o que o BCE usa e o do módulo "Inflação vs salários". Os dois diferem umas décimas sobretudo porque o IHPC inclui o que os turistas gastam em Portugal (restaurantes, hotéis).
+    Subjacente: IHPC sem energia, alimentação, bebidas alcoólicas e tabaco, os preços que mais oscilam. A meta do BCE é 2% na zona euro.
+    Fontes: IPC — <a href="https://bpstat.bportugal.pt/serie/5721524" target="_blank" rel="noopener">BPstat</a> (dados do INE); IHPC — <a href="https://data.ecb.europa.eu/data/datasets/HICP" target="_blank" rel="noopener">BCE Data Portal</a> (dados do Eurostat).`,
   series: [
-    { id: "PT",   label: "Portugal",            short: "Portugal",   color: "--inf", code: "PT|000000", bold: true },
-    { id: "U2",   label: "Zona euro",           short: "Zona euro",  color: "--bde", code: "U2|000000", dashed: true },
-    { id: "CORE", label: "Subjacente Portugal", short: "Subjacente", color: "--m3",  code: "PT|XEF000" },
-    { id: "ENE",  label: "Energia Portugal",    short: "Energia",    color: "--m6",  code: "PT|NRGY00", off: true },
-    { id: "SERV", label: "Serviços Portugal",   short: "Serviços",   color: "--m12", code: "PT|SERV00", off: true },
+    { id: "IPC",  label: "IPC Portugal",          short: "IPC",        color: "--inf", bold: true },
+    { id: "PT",   label: "IHPC Portugal",         short: "IHPC",       color: "--bpt", code: "PT|000000" },
+    { id: "U2",   label: "IHPC zona euro",        short: "Zona euro",  color: "--bde", code: "U2|000000", dashed: true },
+    { id: "CORE", label: "Subjacente Portugal",   short: "Subjacente", color: "--m3",  code: "PT|XEF000", off: true },
+    { id: "ENE",  label: "Energia Portugal",      short: "Energia",    color: "--m6",  code: "PT|NRGY00", off: true },
+    { id: "SERV", label: "Serviços Portugal",     short: "Serviços",   color: "--m12", code: "PT|SERV00", off: true },
   ],
   async load(prev) {
-    const rows = await getCSV(ECB + "HICP/M.PT+U2.N.000000+XEF000+NRGY00+SERV00.4D0.ANR?format=csvdata&startPeriod=2000-01");
-    const by = {};
-    for (const r of rows) {
-      if (r.v == null) continue;
-      const p = r.key.split(".");            // HICP.M.PT.N.000000.4D0.ANR
-      (by[p[2] + "|" + p[4]] ||= {})[r.t] = r.v;
+    const [hicp, ipc] = await Promise.allSettled([
+      getCSV(ECB + "HICP/M.PT+U2.N.000000+XEF000+NRGY00+SERV00.4D0.ANR?format=csvdata&startPeriod=2000-01"),
+      loadIPC(),
+    ]);
+    if (hicp.status === "rejected" && ipc.status === "rejected") throw new Error(hicp.reason.message);
+    const by = {}, errors = [];
+    if (hicp.status === "fulfilled") {
+      for (const r of hicp.value) {
+        if (r.v == null) continue;
+        const p = r.key.split(".");            // HICP.M.PT.N.000000.4D0.ANR
+        (by[p[2] + "|" + p[4]] ||= {})[r.t] = r.v;
+      }
+    } else errors.push("IHPC: " + hicp.reason.message);
+    if (ipc.status === "fulfilled") by.IPC = ipc.value;
+    else errors.push("IPC: " + ipc.reason.message);
+    // se uma das fontes falhar, mantém os valores que já estavam guardados
+    if (prev?.periods) for (const s of this.series) {
+      const k = s.code || s.id;
+      if (!by[k] && prev.values?.[s.id]) { by[k] = {}; prev.periods.forEach((m, i) => { if (prev.values[s.id][i] != null) by[k][m] = prev.values[s.id][i]; }); }
     }
-    if (!by["PT|000000"]) throw new Error("o BCE não devolveu a inflação de Portugal");
-    const all = Object.values(by).flatMap(o => Object.keys(o)).sort();
+    const all = Object.values(by).flatMap(o => Object.keys(o)).filter(m => m >= "2000-01").sort();
+    if (!all.length) throw new Error("sem valores de inflação");
     const periods = monthsBetween(all[0], all[all.length - 1]);
-    const values = {}, errors = [];
+    const values = {};
     for (const s of this.series) {
-      const o = by[s.code];
-      if (!o) errors.push(s.label.toLowerCase() + ": sem valores no BCE");
+      const o = by[s.code || s.id];
+      if (!o && hicp.status === "fulfilled" && s.code) errors.push(s.label.toLowerCase() + ": sem valores no BCE");
       values[s.id] = periods.map(m => o?.[m] ?? null);
     }
     return { periods, values, errors, fetchedAt: Date.now() };
   },
   verdict(d) {
-    const P = d.values.PT, i = lastIdx(P);
+    // a frase principal segue o IPC; se ainda não saiu, usa o IHPC
+    const main = lastIdx(d.values.IPC) >= 0 ? "IPC" : "PT";
+    const P = d.values[main], i = lastIdx(P);
     if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
     const x = P[i], x3 = P[i - 3], x12 = P[i - 12];
     let text, color;
@@ -295,24 +361,25 @@ const INFL = {
     else if (x >= 0) { text = "A inflação está baixa"; color = "var(--flat)"; }
     else { text = "Os preços estão a descer"; color = "var(--flat)"; }
 
-    let msg = `Em ${monthLong(d.periods[i])}, os preços em Portugal estavam ${fmt(Math.abs(x), 1)}% ${x >= 0 ? "acima" : "abaixo"} de um ano antes`;
+    let msg = `Em ${monthLong(d.periods[i])}, a inflação em Portugal medida pelo ${main === "IPC" ? "IPC" : "IHPC"} foi ${fmt(x, 1)}%`;
     if (x3 != null) {
       const dx = x - x3;
-      msg += Math.abs(dx) < 0.2 ? ", um ritmo praticamente igual ao de há três meses." : `, ${dx > 0 ? "a acelerar" : "a abrandar"} face aos ${fmt(x3, 1)}% de há três meses.`;
+      msg += Math.abs(dx) < 0.2 ? ", praticamente igual à de há três meses." : `, ${dx > 0 ? "a acelerar" : "a abrandar"} face aos ${fmt(x3, 1)}% de há três meses.`;
     } else msg += ".";
-    const u = d.values.U2[i];
-    if (u != null) {
-      const g = x - u;
-      msg += Math.abs(g) < 0.2 ? ` Está ao nível da zona euro (${fmt(u, 1)}%).`
-           : ` Está ${fmt(Math.abs(g), 1)} pontos ${g > 0 ? "acima" : "abaixo"} da zona euro (${fmt(u, 1)}%).`;
+    const h = d.values.PT[i], u = d.values.U2[i];
+    if (main === "IPC" && h != null) msg += ` Pelo índice harmonizado (IHPC), que o BCE usa, foi ${fmt(h, 1)}%.`;
+    if (h != null && u != null) {
+      const g = h - u;
+      msg += Math.abs(g) < 0.2 ? ` Nesse índice, Portugal está ao nível da zona euro (${fmt(u, 1)}%).`
+           : ` Nesse índice, Portugal está ${fmt(Math.abs(g), 1)} pontos ${g > 0 ? "acima" : "abaixo"} da zona euro (${fmt(u, 1)}%).`;
     }
     const c = d.values.CORE[i];
-    if (c != null) {
-      msg += c > x + 0.3 ? ` A inflação subjacente, de ${fmt(c, 1)}%, está acima da total: a subida de preços vai além da energia e da alimentação.`
-           : c < x - 0.3 ? ` A inflação subjacente, de ${fmt(c, 1)}%, está abaixo da total: é sobretudo a energia ou a alimentação que puxa os preços.`
+    if (c != null && h != null) {
+      msg += c > h + 0.3 ? ` A inflação subjacente, de ${fmt(c, 1)}%, está acima da total: a subida de preços vai além da energia e da alimentação.`
+           : c < h - 0.3 ? ` A inflação subjacente, de ${fmt(c, 1)}%, está abaixo da total: é sobretudo a energia ou a alimentação que puxa os preços.`
            : ` A inflação subjacente, de ${fmt(c, 1)}%, está em linha com a total.`;
     }
-    if (x12 != null && Math.abs(x - x12) >= 0.3) msg += ` Há um ano estava em ${fmt(x12, 1)}%.`;
+    if (x12 != null && Math.abs(x - x12) >= 0.3) msg += ` Há um ano, o ${main === "IPC" ? "IPC" : "IHPC"} estava em ${fmt(x12, 1)}%.`;
     return { text, color, msg };
   },
   rates(d) {
@@ -2623,7 +2690,7 @@ INFL.fc = function (cd) {
   const pairs = imfAfter("PCPIPCH", +last.slice(0, 4) - 1); if (!pairs.length) return null;
   const map = {}; pairs.forEach(([y, v]) => map[y + "-12"] = v);
   return { periods: monthsBetween(addMonths(last, 1), pairs[pairs.length - 1][0] + "-12"),
-           sets: [{ label: "Inflação prevista (FMI, média do ano)", color: "--inf", map, follows: "PT", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: inflação ${fmt(v, 1)}%` }] };
+           sets: [{ label: "Inflação prevista (FMI, média do ano)", color: "--inf", map, follows: "IPC", tip: (p, v) => ` Previsão FMI ${p.slice(0, 4)}: inflação ${fmt(v, 1)}%` }] };
 };
 // --- PIB e desemprego (FMI)
 GDPUNE.fc = function (cd) {
