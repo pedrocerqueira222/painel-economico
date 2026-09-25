@@ -9,6 +9,7 @@ Vai buscar ao INE, para Portugal e 5 concelhos:
   - imigrantes e emigrantes por ano (Eurostat) -> dados/migracao.json
   - mercados: petróleo, gás, ouro, prata, bolsas (Yahoo Finance / Stooq) e combustíveis em Portugal
     (boletim semanal da Comissão Europeia) -> dados/mercados.json  [a cada corrida, sem a regra das 20 h]
+  - previsões do FMI para Portugal (World Economic Outlook) -> dados/previsoes.json
 Corre todos os dias no GitHub (ver .github/workflows).
 
 Só usa a biblioteca padrão do Python: não é preciso instalar nada.
@@ -946,6 +947,50 @@ def atualizar_mercados(hoje: datetime) -> bool:
 
 
 
+# ================================================================ previsões do FMI
+PREVISOES = os.path.join(PASTA, "previsoes.json")
+FMI_URL = os.environ.get("FMI_URL", "https://www.imf.org/external/datamapper/api/v1/")
+FMI_IND = {
+    "PCPIPCH":     "Inflação (média anual, %)",
+    "NGDP_RPCH":   "Crescimento real do PIB (%)",
+    "LUR":         "Taxa de desemprego (%)",
+    "BCA_NGDPD":   "Balança corrente (% do PIB)",
+    "GGXWDG_NGDP": "Dívida pública bruta (% do PIB)",
+    "GGXCNL_NGDP": "Saldo orçamental (% do PIB)",
+}
+
+
+def atualizar_previsoes(hoje: datetime) -> bool:
+    antigo = ler(PREVISOES)
+    valores = dict((antigo.get("fmi") or {}).get("valores") or {})
+    ok = 0
+    for ind in FMI_IND:
+        try:
+            req = urllib.request.Request(FMI_URL + ind + "/PRT", headers={**CABECALHOS, "Accept": "application/json"})
+            j = json.loads(ler_url(req, limite=60).decode("utf-8"))
+            serie = ((j.get("values") or {}).get(ind) or {}).get("PRT") or {}
+            serie = {str(a): round(float(v), 2) for a, v in serie.items() if v is not None and 2000 <= int(a) <= hoje.year + 6}
+            if serie:
+                valores[ind] = serie
+                ok += 1
+                print(f"FMI, {FMI_IND[ind]}: {min(serie)}–{max(serie)}")
+        except Exception as e:
+            print(f"FMI, {ind}: falhou ({e})", file=sys.stderr)
+    if not valores:
+        return False
+    novo = {"fmi": {"fonte": "FMI, World Economic Outlook (publicado em abril e outubro)", "valores": valores}}
+    if (antigo.get("fmi") or {}).get("valores") == valores:
+        print("previsoes.json: sem alterações.")
+        return True
+    novo["fmi"]["obtido"] = hoje.strftime("%Y-%m-%d")
+    os.makedirs(PASTA, exist_ok=True)
+    with open(PREVISOES, "w", encoding="utf-8") as f:
+        json.dump(novo, f, ensure_ascii=False, indent=1)
+    print(f"previsoes.json: gravado ({ok} indicadores).")
+    return True
+
+
+
 def ine_acessivel() -> bool:
     # a tarefa corre de hora a hora: basta insistir um pouco em cada corrida
     for n in range(6):
@@ -1005,7 +1050,7 @@ def main() -> int:
               "a tarefa volta a tentar amanhã.", file=sys.stderr)
         tarefas = []
     resultados = []
-    for tarefa in tarefas + [atualizar_migracao]:
+    for tarefa in tarefas + [atualizar_migracao, atualizar_previsoes]:
         try:
             resultados.append(tarefa(hoje))
         except Exception as e:
