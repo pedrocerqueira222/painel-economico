@@ -55,7 +55,7 @@ def sem_tempo() -> bool:
 # confirmado no registo do GitHub (INE, set. 2026): trimestres do indicador 0012234 = S5A + ano + trimestre, desde 2019-Q4
 FORMATOS = {"0012234": {"prefixo": "S5A", "tipo": "trimestral"}}
 INCREMENTAL = False
-FALHAS_REDE, LIMITE_FALHAS = 0, 4
+FALHAS_REDE, LIMITE_FALHAS = 0, 8
 
 
 class INEEmBaixo(RuntimeError):
@@ -724,7 +724,8 @@ def atualizar_migracao(hoje: datetime) -> bool:
 
 
 def ine_acessivel() -> bool:
-    for n in range(3):
+    # o INE às vezes demora a "acordar" para o GitHub: insiste até 10 vezes (no máximo ~10 minutos)
+    for n in range(10):
         try:
             req = urllib.request.Request(INE_URL + "?" + urllib.parse.urlencode({"op": "2", "varcd": INDICADOR, "Dim1": "X", "lang": "PT"}), headers=CABECALHOS)
             with urllib.request.urlopen(req, timeout=40) as r:
@@ -733,8 +734,8 @@ def ine_acessivel() -> bool:
         except urllib.error.HTTPError:
             return True  # respondeu, mesmo que com erro: está acessível
         except Exception as e:
-            print(f"Teste de ligação ao INE {n + 1}/3: {e}", file=sys.stderr)
-            time.sleep(20)
+            print(f"Teste de ligação ao INE {n + 1}/10: {e}", file=sys.stderr)
+            time.sleep(15)
     return False
 
 
