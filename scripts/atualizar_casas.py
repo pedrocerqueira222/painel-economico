@@ -7,6 +7,8 @@ Vai buscar ao INE, para Portugal e 5 concelhos:
   - fogos licenciados e concluídos em construções novas para habitação (Portugal) -> dados/construcao.json
   - número de casas vendidas (Portugal) -> dados/transacoes.json
   - imigrantes e emigrantes por ano (Eurostat) -> dados/migracao.json
+  - mercados: petróleo, gás, ouro, prata, bolsas (Yahoo Finance / Stooq) e combustíveis em Portugal
+    (boletim semanal da Comissão Europeia) -> dados/mercados.json  [a cada corrida, sem a regra das 20 h]
 Corre todos os dias no GitHub (ver .github/workflows).
 
 Só usa a biblioteca padrão do Python: não é preciso instalar nada.
@@ -115,6 +117,21 @@ def codigos_guardados(indicador: str, hoje: datetime, quantos: int) -> list:
     return out
 
 
+def ler_url(req, limite: float = 75, pausa: float = 30) -> bytes:
+    """Abre e lê um endereço, com limite de tempo total: se o INE mandar a resposta aos pinguinhos, desiste."""
+    inicio = time.time()
+    with urllib.request.urlopen(req, timeout=pausa) as r:
+        partes = []
+        while True:
+            if time.time() - inicio > limite:
+                raise TimeoutError(f"resposta demasiado lenta (mais de {limite:.0f} s)")
+            bloco = r.read(65536)
+            if not bloco:
+                break
+            partes.append(bloco)
+    return b"".join(partes)
+
+
 class ErroINE(Exception):
     """O INE respondeu, mas com uma mensagem de erro (por exemplo, trimestre ainda não publicado)."""
 
@@ -127,8 +144,7 @@ def pedir(params: dict, tentativas: int = 2) -> list:
             raise INEEmBaixo("o INE não está a responder")
         try:
             req = urllib.request.Request(url, headers=CABECALHOS)
-            with urllib.request.urlopen(req, timeout=45) as r:
-                dados = json.loads(r.read().decode("utf-8"))
+            dados = json.loads(ler_url(req).decode("utf-8"))
             rede_ok()
             raiz = dados[0] if isinstance(dados, list) else dados
             if isinstance(raiz, dict) and "Sucesso" in raiz and "Falso" in raiz["Sucesso"]:
@@ -192,8 +208,7 @@ def ficha(indicador: str, timeout: int = 45) -> str:
     url = INE_URL.replace("pindica.jsp", "pindicaMeta.jsp") + "?" + urllib.parse.urlencode({"varcd": indicador, "lang": "PT"})
     req = urllib.request.Request(url, headers=CABECALHOS)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            texto = r.read().decode("utf-8", "replace")
+        texto = ler_url(req, limite=timeout, pausa=min(30, timeout)).decode("utf-8", "replace")
         rede_ok()
         return texto
     except urllib.error.HTTPError:
@@ -382,40 +397,43 @@ def nome_indicador(texto: str) -> str:
         return m.group(1) if m else ""
 
 
-def e_rendas_trimestral(nome: str) -> bool:
+def tipo_rendas(nome: str):
+    """Classifica os indicadores trimestrais de rendas (€/m², últimos 12 meses) do INE."""
     n = nome.lower()
-    return ("rendas" in n and "12 meses" in n and "trimestral" in n and "€" in n
-            and "nuts" in n and "100 000" not in n and "tipologia" not in n
-            and "setor" not in n and "locatários" not in n and "n.º" not in n)
+    if not ("rendas" in n and "12 meses" in n and "trimestral" in n and "€" in n):
+        return None
+    if any(x in n for x in ("tipologia", "setor", "locatários", "n.º")):
+        return None
+    if "100 000" in n:
+        return "historico"      # 2020 até hoje, só concelhos com mais de 100 mil habitantes
+    if "geografia 2025" in n:
+        return "concelhos"      # todos os concelhos, só o trimestre mais recente
+    if "nuts - 2024" in n:
+        return "regioes"        # país e regiões, 2020 até hoje
+    return None
 
 
-def procurar_indicador_rendas(guardado: str | None) -> str | None:
-    """Procura, pela ficha, o código do indicador trimestral das rendas (o INE não o divulga de forma fácil)."""
-    if guardado and INCREMENTAL and guardado in FORMATOS:
-        return guardado
-    candidatos = ([guardado] if guardado else []) + [f"{c:07d}" for c in range(14700, 14780)] + [f"{c:07d}" for c in range(14600, 14700)]
-    vistos, erros_seguidos = set(), 0
+def procurar_indicadores_rendas(guardados: dict) -> dict:
+    """Procura, pelas fichas do INE, os códigos dos três indicadores de rendas (uma só passagem)."""
+    if guardados and INCREMENTAL and all(guardados.get(k) for k in ("historico", "concelhos")):
+        return guardados
+    achados = dict(guardados or {})
+    candidatos = [f"{c:07d}" for c in range(14700, 14780)] + [f"{c:07d}" for c in range(14600, 14700)]
     for c in candidatos:
-        if sem_tempo() or ine_em_baixo():
+        if sem_tempo() or ine_em_baixo() or all(achados.get(k) for k in ("historico", "concelhos", "regioes")):
             break
-        if c in vistos:
+        if c in achados.values():
             continue
-        vistos.add(c)
         try:
             nome = nome_indicador(ficha(c, timeout=30))
-            erros_seguidos = 0
         except Exception:
-            erros_seguidos += 1
-            if erros_seguidos >= 5:
-                print("Rendas: a ficha do INE não está a responder; desisto da procura.", file=sys.stderr)
-                break
             continue
-        if nome and e_rendas_trimestral(nome):
-            print(f"Rendas: indicador trimestral encontrado, {c}: {nome}")
-            return c
-        time.sleep(0.2)
-    print("Rendas: indicador trimestral não encontrado; vou usar o anual.", file=sys.stderr)
-    return None
+        t = tipo_rendas(nome)
+        if t and not achados.get(t):
+            achados[t] = c
+            print(f"Rendas ({t}): indicador {c}: {nome}")
+        time.sleep(0.3)
+    return achados
 
 
 def mediana(l) -> bool:
@@ -428,16 +446,25 @@ def atualizar_rendas(hoje: datetime) -> bool:
     if os.path.exists(RENDAS):
         with open(RENDAS, encoding="utf-8") as f:
             antigo = json.load(f)
-    codigo = procurar_indicador_rendas(antigo.get("indicador") if antigo.get("frequencia") == "trimestral" else None)
-    por_local, extra = {}, {}
-    if codigo:
+    guardados = antigo.get("indicadores") if antigo.get("frequencia") == "trimestral" else {}
+    cods = procurar_indicadores_rendas(guardados or {})
+    por_local = {n: {} for n in LOCALIDADES}
+    # ordem de prioridade: histórico dos concelhos grandes, depois país/regiões, depois o trimestre mais recente de todos
+    for tipo in ("concelhos", "regioes", "historico"):
+        cod = cods.get(tipo)
+        if not cod:
+            continue
         try:
-            por_local = recolher(hoje, codigo)
-            extra = {"fonte": f"INE, indicador {codigo} (renda mediana por m² dos novos contratos, últimos 12 meses)",
-                     "indicador": codigo, "frequencia": "trimestral"}
+            dados = recolher(hoje, cod)
+            for nome, serie in dados.items():
+                por_local[nome].update(serie)
+            print(f"Rendas ({tipo}, {cod}): " + ", ".join(f"{n} {len(v)}" for n, v in dados.items() if v))
         except Exception as e:
-            print(f"Rendas (trimestral): falhou ({e})", file=sys.stderr)
+            print(f"Rendas ({tipo}): falhou ({e})", file=sys.stderr)
+    extra = {"fonte": "INE, renda mediana por m² dos novos contratos, últimos 12 meses (Metodologia 2026)",
+             "indicadores": {k: v for k, v in cods.items() if v}, "frequencia": "trimestral"}
     if not any(por_local.values()):
+        # último recurso: versão anual
         anos = [f"S7A{a}" for a in range(hoje.year, hoje.year - 9, -1)]
         try:
             por_local = recolher(hoje, RENDAS_ANUAL, codigos=anos, aceitar=mediana)
@@ -445,8 +472,6 @@ def atualizar_rendas(hoje: datetime) -> bool:
                      "indicador": RENDAS_ANUAL, "frequencia": "anual"}
         except Exception as e:
             print(f"Rendas (anual): falhou ({e})", file=sys.stderr)
-    for nome, serie in por_local.items():
-        print(f"Rendas, {nome}: {len(serie)} períodos")
     if not any(por_local.values()):
         print("Rendas: nenhum dado obtido; o ficheiro fica como estava.", file=sys.stderr)
         return False
@@ -686,8 +711,7 @@ EUROSTAT = os.environ.get("EUROSTAT_URL", "https://ec.europa.eu/eurostat/api/dis
 def eurostat(dataset: str, filtros: dict, preferir: dict) -> dict:
     url = EUROSTAT + dataset + "?" + urllib.parse.urlencode({"format": "JSON", "lang": "EN", **filtros})
     req = urllib.request.Request(url, headers=CABECALHOS)
-    with urllib.request.urlopen(req, timeout=120) as r:
-        j = json.loads(r.read().decode("utf-8"))
+    j = json.loads(ler_url(req, limite=120).decode("utf-8"))
     ids, size = j["id"], j["size"]
     stride, acc = [0] * len(ids), 1
     for k in range(len(ids) - 1, -1, -1):
@@ -723,13 +747,154 @@ def atualizar_migracao(hoje: datetime) -> bool:
     return gravar_simples(MIGRACAO, series, {"fonte": "Eurostat (migr_imm1ctz, migr_emi1ctz), a partir de dados do INE", "frequencia": "anual"}, hoje)
 
 
+# ================================================================ mercados e combustíveis
+MERCADOS = os.path.join(PASTA, "mercados.json")
+YAHOO = os.environ.get("YAHOO_URL", "https://query1.finance.yahoo.com/v8/finance/chart/")
+STOOQ = os.environ.get("STOOQ_URL", "https://stooq.com/q/d/l/")
+BOLETIM = os.environ.get("BOLETIM_URL", "https://energy.ec.europa.eu/document/download/906e60ca-8b6a-44e7-8589-652854d2fd3f_en?filename=Weekly_Oil_Bulletin_Prices_History_maticni_4web.xlsx")
+
+# nome -> (símbolo Yahoo, símbolo Stooq alternativo, descrição, unidade)
+ATIVOS = {
+    "brent":     ("BZ=F",      "cb.f",     "Petróleo Brent",            "USD/barril"),
+    "gas":       ("TTF=F",     None,       "Gás natural europeu (TTF)", "EUR/MWh"),
+    "ouro":      ("GC=F",      "xauusd",   "Ouro",                      "USD/onça"),
+    "prata":     ("SI=F",      "xagusd",   "Prata",                     "USD/onça"),
+    "eurusd":    ("EURUSD=X",  "eurusd",   "Euro/dólar",                "USD por EUR"),
+    "psi":       ("PSI20.LS",  None,       "PSI (Lisboa)",              "pontos"),
+    "stoxx50":   ("^STOXX50E", None,       "Euro Stoxx 50",             "pontos"),
+    "sp500":     ("^GSPC",     "^spx",     "S&P 500 (EUA)",             "pontos"),
+    "nasdaq":    ("^IXIC",     "^ndq",     "Nasdaq (EUA)",              "pontos"),
+    "mundo":     ("URTH",      "urth.us",  "MSCI World (ETF)",          "USD"),
+}
+
+
+def yahoo(simbolo: str) -> dict:
+    url = YAHOO + urllib.parse.quote(simbolo) + "?" + urllib.parse.urlencode({"range": "10y", "interval": "1d"})
+    req = urllib.request.Request(url, headers={**CABECALHOS, "Accept": "application/json"})
+    j = json.loads(ler_url(req, limite=60).decode("utf-8"))
+    r = j["chart"]["result"][0]
+    ts, fecho = r["timestamp"], r["indicators"]["quote"][0]["close"]
+    return {datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d"): round(v, 4) for t, v in zip(ts, fecho) if v is not None}
+
+
+def stooq(simbolo: str) -> dict:
+    url = STOOQ + "?" + urllib.parse.urlencode({"s": simbolo, "i": "d"})
+    texto = ler_url(urllib.request.Request(url, headers=CABECALHOS), limite=60).decode("utf-8", "replace")
+    out = {}
+    for linha in texto.strip().splitlines()[1:]:
+        p = linha.split(",")
+        if len(p) >= 5:
+            try:
+                out[p[0]] = round(float(p[4]), 4)
+            except ValueError:
+                pass
+    corte = f"{datetime.now(timezone.utc).year - 10}-01-01"
+    return {k: v for k, v in out.items() if k >= corte}
+
+
+def combustiveis() -> dict:
+    """Preços médios semanais em Portugal (com impostos), €/litro, do boletim da Comissão Europeia."""
+    import io
+    try:
+        import openpyxl
+    except ImportError:
+        raise RuntimeError("falta o módulo openpyxl")
+    dados = ler_url(urllib.request.Request(BOLETIM, headers=CABECALHOS), limite=120, pausa=60)
+    wb = openpyxl.load_workbook(io.BytesIO(dados), read_only=True, data_only=True)
+    alvo = {"gasolina95": re.compile(r"^PT_price_with_tax_euro_?95$", re.I), "gasoleo": re.compile(r"^PT_price_with_tax_diesel$", re.I)}
+    out = {"gasolina95": {}, "gasoleo": {}}
+    for ws in wb.worksheets:
+        cols, linha_cab = {}, None
+        for n, row in enumerate(ws.iter_rows(values_only=True)):
+            if linha_cab is None:
+                for k, cel in enumerate(row):
+                    for nome, rx in alvo.items():
+                        if isinstance(cel, str) and rx.match(cel.strip()):
+                            cols[nome] = k
+                if cols:
+                    linha_cab = n
+                if n > 30 and linha_cab is None:
+                    break
+                continue
+            d = row[0] if row else None
+            if isinstance(d, datetime):
+                d = d.strftime("%Y-%m-%d")
+            elif isinstance(d, str) and re.match(r"^\d{4}-\d{2}-\d{2}", d.strip()):
+                d = d.strip()[:10]
+            elif isinstance(d, str) and re.match(r"^\d{2}/\d{2}/\d{4}$", d.strip()):
+                dd, mm, aa = d.strip().split("/"); d = f"{aa}-{mm}-{dd}"
+            else:
+                continue
+            for nome, k in cols.items():
+                v = row[k] if k < len(row) else None
+                if isinstance(v, str):
+                    try:
+                        v = float(v.replace(" ", "").replace(",", "."))
+                    except ValueError:
+                        v = None
+                if isinstance(v, (int, float)) and v > 0:
+                    out[nome][d] = round(v / 1000 if v > 50 else v, 4)   # o boletim vem em €/1000 litros
+        if any(out.values()):
+            break
+    if not any(out.values()):
+        raise RuntimeError("não encontrei as colunas de Portugal no boletim")
+    return out
+
+
+def atualizar_mercados(hoje: datetime) -> bool:
+    antigo = ler(MERCADOS)
+    hoje_txt = hoje.strftime("%Y-%m-%d")
+    series = {}
+    for nome, (ysym, ssym, desc, unid) in ATIVOS.items():
+        valores, fonte = {}, None
+        try:
+            valores, fonte = yahoo(ysym), f"Yahoo Finance ({ysym})"
+        except Exception as e:
+            print(f"Mercados, {desc}: Yahoo falhou ({e})", file=sys.stderr)
+            if ssym:
+                try:
+                    valores, fonte = stooq(ssym), f"Stooq ({ssym})"
+                except Exception as e2:
+                    print(f"Mercados, {desc}: Stooq falhou ({e2})", file=sys.stderr)
+        valores = {d: v for d, v in valores.items() if d < hoje_txt}   # só fechos de dias já terminados
+        velho = (antigo.get("series") or {}).get(nome) or {}
+        juntos = {**dict(zip(velho.get("datas", []), velho.get("valores", []))), **valores}
+        if juntos:
+            datas = sorted(juntos)
+            series[nome] = {"nome": desc, "unidade": unid, "fonte": fonte or velho.get("fonte"),
+                            "datas": datas, "valores": [juntos[d] for d in datas]}
+            print(f"Mercados, {desc}: {len(valores)} dias novos/atualizados, último {datas[-1]}")
+    try:
+        comb = combustiveis()
+        comb_out = {"fonte": "Comissão Europeia, Weekly Oil Bulletin (preços com impostos)"}
+        for nome, serie in comb.items():
+            datas = sorted(serie)
+            comb_out[nome] = {"datas": datas, "valores": [serie[d] for d in datas]}
+        print(f"Combustíveis: gasolina {len(comb['gasolina95'])} semanas, gasóleo {len(comb['gasoleo'])} semanas")
+    except Exception as e:
+        print(f"Combustíveis: falhou ({e})", file=sys.stderr)
+        comb_out = antigo.get("combustiveis")
+    novo = {"series": series, "combustiveis": comb_out}
+    if not series and not comb_out:
+        return False
+    if {k: antigo.get(k) for k in novo} == novo:
+        print("mercados.json: sem alterações.")
+        return True
+    novo["atualizado"] = hoje.strftime("%Y-%m-%dT%H:%M:%SZ")
+    os.makedirs(PASTA, exist_ok=True)
+    with open(MERCADOS, "w", encoding="utf-8") as f:
+        json.dump(novo, f, ensure_ascii=False, separators=(",", ":"))
+    print("mercados.json: gravado.")
+    return True
+
+
+
 def ine_acessivel() -> bool:
     # a tarefa corre de hora a hora: basta insistir um pouco em cada corrida
     for n in range(6):
         try:
             req = urllib.request.Request(INE_URL + "?" + urllib.parse.urlencode({"op": "2", "varcd": INDICADOR, "Dim1": "X", "lang": "PT"}), headers=CABECALHOS)
-            with urllib.request.urlopen(req, timeout=40) as r:
-                r.read(200)
+            ler_url(req, limite=40, pausa=30)
             return True
         except urllib.error.HTTPError:
             return True  # respondeu, mesmo que com erro: está acessível
@@ -756,6 +921,11 @@ def main() -> int:
     hoje = datetime.now(timezone.utc)
     forcar = os.environ.get("FORCAR", "").lower() in ("1", "true", "sim")
     estado = ler_estado()
+    try:
+        ok_mercados = atualizar_mercados(hoje)
+    except Exception as e:
+        print(f"Mercados: erro inesperado ({e})", file=sys.stderr)
+        ok_mercados = False
     ultima = estado.get("ultima_ida_ao_ine")
     if ultima and not forcar:
         try:
@@ -763,9 +933,9 @@ def main() -> int:
         except ValueError:
             horas = 999
         if horas < HORAS_ENTRE_IDAS:
-            print(f"Os dados do INE já foram atualizados há {horas:.0f} h ({ultima}). Nada a fazer agora; "
+            print(f"Os dados do INE já foram atualizados há {horas:.0f} h ({ultima}). Nada a fazer no INE agora; "
                   f"volto a tentar daqui a {HORAS_ENTRE_IDAS - horas:.0f} h.")
-            return 0
+            return 0 if ok_mercados else 1
     carregar_formatos()
     # se já há dados guardados, só pede os períodos mais recentes (o histórico fica no ficheiro)
     INCREMENTAL = os.path.exists(FICHEIRO)  # há dados guardados: basta pedir os períodos mais recentes
