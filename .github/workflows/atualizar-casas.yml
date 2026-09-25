@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Instalar leitor de Excel (boletim dos combustíveis)
+        run: pip install --quiet openpyxl
       - name: Ir buscar os dados ao INE
         timeout-minutes: 45
         continue-on-error: true
@@ -49,6 +51,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Sem dados novos."
           else
-            git commit -m "Dados atualizados (INE e Eurostat)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+            git commit -m "Dados atualizados (INE, Eurostat e mercados)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
             git push origin HEAD:main
           fi
