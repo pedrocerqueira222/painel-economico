@@ -757,7 +757,7 @@ POPULACAO = os.path.join(PASTA, "populacao.json")
 def atualizar_populacao(hoje: datetime) -> bool:
     """População a 1 de janeiro, saldo natural e saldo migratório de Portugal (Eurostat demo_gind)."""
     series = {"populacao": {}, "natural": {}, "migratorio": {}}
-    for nome, ind in (("populacao", "JAN"), ("natural", "NATGROW"), ("migratorio", "CNMIGRATNET")):
+    for nome, ind in (("populacao", "JAN"), ("natural", "NATGROW"), ("migratorio", "CNMIGRAT")):
         try:
             series[nome] = eurostat("demo_gind", {"geo": "PT", "indic_de": ind}, {"freq": ["A"], "indic_de": [ind]})
             print(f"{nome}: {len(series[nome])} anos (Eurostat demo_gind, {ind})")
