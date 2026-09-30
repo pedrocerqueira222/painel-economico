@@ -4,7 +4,7 @@ Painel pessoal com os principais indicadores da economia e da habitação em Por
 
 **Abrir o painel:** https://pedrocerqueira222.github.io/painel-economico/
 
-A página tem três separadores: **Económico**, **Habitação** e **Mercados**. A página lembra-se do último separador aberto, e o endereço muda para cada um (por exemplo `…/painel-economico/#mkt`), por isso dá para guardar um separador nos favoritos.
+A página tem quatro separadores: **Economia**, **Custo de vida**, **Habitação** e **Mercados**, cada um dividido em grupos. A página lembra-se do último separador aberto, e o endereço muda para cada um (`#eco`, `#vida`, `#hab`, `#mkt`), por isso dá para guardar um separador nos favoritos.
 
 Cada gráfico abre com um clique no título e mostra um comentário automático, que é escrito a partir dos dados mais recentes. Exemplos: *"O dinheiro está a ficar mais caro"*, *"O poder de compra está a aumentar"*, *"A procura de casas está muito forte"*.
 
@@ -12,48 +12,91 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 
 ## O que mostra
 
-### Económico
+### Economia (`#eco`)
+
+**Atividade e emprego**
 
 | Gráfico | Pergunta a que responde | Dados |
 |---|---|---|
-| Inflação vs salários | O poder de compra está a aumentar ou a diminuir? | Inflação mensal (IHPC) e remuneração por trabalhador, trimestral |
-| BCE vs Euribor | O dinheiro está a ficar mais caro ou mais barato? | Taxa de depósito do BCE, Euribor a 3, 6 e 12 meses |
 | PIB e desemprego | Como estão a economia e o mercado de trabalho? | Crescimento real do PIB, taxa de desemprego mensal |
 | Consumo e investimento | O que está a sustentar a economia? | Crescimento real do consumo das famílias e do investimento |
-| Contas com o exterior | Portugal está a ganhar ou a perder dinheiro face ao exterior? | Saldo de bens e serviços e balança corrente, em % do PIB |
-| Juros da dívida: Portugal vs Alemanha | Os mercados confiam em Portugal? | Juros das obrigações a 10 anos e diferença (spread) |
-| Dívida pública e défice | As contas públicas estão a melhorar? | Dívida pública e saldo orçamental, em % do PIB |
-| Poupança e endividamento das famílias | As famílias estão mais ou menos vulneráveis? | Taxa de poupança e empréstimos em % do rendimento disponível, Portugal e zona euro |
-| População residente | Quantas pessoas vivem em Portugal e porque está a mudar? | População no fim de cada ano, saldo natural (nascimentos − mortes) e saldo migratório |
 
-### Habitação
+**População**
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
+| População residente | Quantas pessoas vivem em Portugal e porque está a mudar? | População no fim de cada ano, saldo natural (nascimentos − mortes) e saldo migratório |
+| Pessoas que chegam a Portugal | Quantas pessoas entram e saem todos os anos? | Imigrantes, emigrantes e saldo migratório |
+
+**Estado e exterior**
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
+| Dívida pública e défice | As contas públicas estão a melhorar? | Dívida pública e saldo orçamental, em % do PIB |
+| Juros da dívida: Portugal vs Alemanha | Os mercados confiam em Portugal? | Juros das obrigações a 10 anos e diferença (spread) |
+| Contas com o exterior | Portugal está a ganhar ou a perder dinheiro face ao exterior? | Saldo de bens e serviços e balança corrente, em % do PIB |
+
+### Custo de vida (`#vida`)
+
+**Preços e salários**
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
+| Inflação | Os preços estão a subir mais depressa ou mais devagar? | Inflação mensal em Portugal (IPC do INE e IHPC) e na zona euro |
+| Inflação vs salários | O poder de compra está a aumentar ou a diminuir? | Inflação mensal (IHPC) e remuneração por trabalhador, trimestral |
+| Combustíveis em Portugal | Quanto custa abastecer e para onde vai o preço? | Gasolina 95 e gasóleo, €/litro com impostos, por semana |
+
+**Juros e poupança**
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
+| BCE vs Euribor | O dinheiro está a ficar mais caro ou mais barato? | Taxa de depósito do BCE, Euribor a 3, 6 e 12 meses |
+| Poupança e endividamento das famílias | As famílias estão mais ou menos vulneráveis? | Taxa de poupança e empréstimos em % do rendimento disponível, Portugal e zona euro |
+
+### Habitação (`#hab`)
+
+**Preços e rendas**
 
 | Gráfico | Pergunta a que responde | Dados |
 |---|---|---|
 | Valor das casas em Portugal | Quanto subiram as casas em cada ano e quanto se prevê que subam? | Variação média anual do índice de preços da habitação, ano em curso e previsões publicadas (valores fixos) |
 | Preço das casas | Quanto custa comprar? | Preço mediano €/m² das casas vendidas: Portugal, Lisboa, Porto, Matosinhos, Maia, Valongo |
+| Rendas | Quanto custa arrendar e como está a evoluir? | Renda mediana €/m² dos novos contratos, nas mesmas 6 zonas |
 | Preços das casas vs salários | As casas estão a ficar mais caras face aos rendimentos? | Índice de preços da habitação e índice de salários, ambos a começar em 100 |
 | As casas estão sobrevalorizadas? | Os preços estão acima do seu nível de longo prazo? | Preço real das casas (sem inflação) e tendência de longo prazo |
-| Rendas | Quanto custa arrendar e como está a evoluir? | Renda mediana €/m² dos novos contratos, nas mesmas 6 zonas |
-| Juros do crédito à habitação | Quanto cobram os bancos nos créditos novos? | Taxa média dos novos empréstimos à habitação e Euribor a 12 meses |
-| Novos créditos à habitação | As famílias estão a pedir mais ou menos crédito? | Montante de novos empréstimos por mês, média de 12 meses e renegociações |
-| Prestação do crédito à habitação | Quanto custa financiar uma casa? | Prestação de 200 000 € e 100 000 € a 30 anos, com Euribor + spread (escolhe-se no gráfico) |
-| Construção | Estamos a construir casas suficientes? | Fogos licenciados e fogos concluídos em construções novas, comparados com o aumento de população vindo da migração |
-| Procura | Quão forte está a procura? | Número de casas vendidas e crédito à habitação novo concedido pelos bancos |
-| Pessoas que chegam a Portugal | Quantas pessoas entram e saem todos os anos? | Imigrantes, emigrantes e saldo migratório |
 
-
-### Mercados
+**Procura e construção**
 
 | Gráfico | Pergunta a que responde | Dados |
 |---|---|---|
-| Combustíveis em Portugal | Quanto custa abastecer e para onde vai o preço? | Gasolina 95 e gasóleo, €/litro com impostos, por semana |
-| Petróleo e gás | O que está a acontecer às matérias-primas de energia? | Brent em € e em $, gás natural europeu (TTF) |
-| Ouro e prata | O "porto de abrigo" está a subir? | Preço por onça em euros |
-| Euro vs dólar | O euro está a ficar mais forte ou mais fraco? | Dólares por euro (câmbio de referência do BCE) |
+| Procura | Quão forte está a procura? | Número de casas vendidas e crédito à habitação novo concedido pelos bancos |
+| Construção | Estamos a construir casas suficientes? | Fogos licenciados e fogos concluídos em construções novas, comparados com o aumento de população vindo da migração |
+
+**Crédito à habitação**
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
+| Juros do crédito à habitação | Quanto cobram os bancos nos créditos novos? | Taxa média dos novos empréstimos à habitação e Euribor a 12 meses |
+| Novos créditos à habitação | As famílias estão a pedir mais ou menos crédito? | Montante de novos empréstimos por mês, média de 12 meses e renegociações |
+| Prestação do crédito à habitação | Quanto custa financiar uma casa? | Prestação de 200 000 € e 100 000 € a 30 anos, com Euribor + spread (escolhe-se no gráfico) |
+
+### Mercados (`#mkt`)
+
+**Ações e criptomoedas**
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
 | Bolsas | Como estão os mercados acionistas? | PSI, Euro Stoxx 50, S&P 500, Nasdaq e MSCI World, todos a começar em 100 |
 | MSCI World: IWDA & EUNL | Como está o ETF mais usado para investir no mundo? | Preço em € do iShares Core MSCI World em Amesterdão (IWDA) e na Xetra (EUNL) |
 | Bitcoin e Ethereum | Como estão as criptomoedas? | Preço em € e distância ao máximo |
+
+**Matérias-primas e câmbio**
+
+| Gráfico | Pergunta a que responde | Dados |
+|---|---|---|
+| Petróleo e gás | O que está a acontecer às matérias-primas de energia? | Brent em € e em $, gás natural europeu (TTF) |
+| Ouro e prata | O "porto de abrigo" está a subir? | Preço por onça em euros |
+| Euro vs dólar | O euro está a ficar mais forte ou mais fraco? | Dólares por euro (câmbio de referência do BCE) |
 
 ---
 
@@ -128,6 +171,8 @@ Cada gráfico tem por baixo uma nota com a definição exata dos dados e a sua o
 
 **Alterar a página:**
 substituir o `index.html` na raiz do repositório (**Add file → Upload files**). Os dados não se perdem. Depois de 1 a 2 minutos, recarregar o painel com **Ctrl + F5**.
+
+**Mudar um gráfico de separador ou de grupo:** no `index.html`, procurar `const LAYOUT`. Cada linha tem o separador, o nome do grupo e os gráficos, pela ordem em que aparecem.
 
 **Alterar o programa ou a tarefa:**
 - `atualizar_casas.py` fica **dentro da pasta `scripts/`**;
