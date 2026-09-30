@@ -2793,7 +2793,7 @@ const POP = {
       // o ficheiro ainda não existe: tenta o Eurostat diretamente
       try {
         const get = async ind => { const r = await fetchTimeout(EUROSTAT + "demo_gind?format=JSON&lang=EN&geo=PT&indic_de=" + ind, 30000); if (!r.ok) throw new Error("erro " + r.status); return eurostatAnnual(await r.json()); };
-        const [p, n, m] = await Promise.all(["JAN", "NATGROW", "CNMIGRATNET"].map(get));
+        const [p, n, m] = await Promise.all(["JAN", "NATGROW", "CNMIGRAT"].map(get));
         raw = { populacao: p, natural: n, migratorio: m };
       } catch (e) { throw ghMissing(); }
     }
