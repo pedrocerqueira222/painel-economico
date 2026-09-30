@@ -7,6 +7,7 @@ Vai buscar ao INE, para Portugal e 5 concelhos:
   - fogos licenciados e concluídos em construções novas para habitação (Portugal) -> dados/construcao.json
   - número de casas vendidas (Portugal) -> dados/transacoes.json
   - imigrantes e emigrantes por ano (Eurostat) -> dados/migracao.json
+  - população residente, saldo natural e saldo migratório (Eurostat) -> dados/populacao.json
   - mercados: petróleo, gás, ouro, prata, bolsas (Yahoo Finance / Stooq) e combustíveis em Portugal
     (boletim semanal da Comissão Europeia) -> dados/mercados.json  [a cada corrida, sem a regra das 20 h]
   - previsões do FMI para Portugal (World Economic Outlook) -> dados/previsoes.json
@@ -750,6 +751,22 @@ def atualizar_migracao(hoje: datetime) -> bool:
     return gravar_simples(MIGRACAO, series, {"fonte": "Eurostat (migr_imm1ctz, migr_emi1ctz), a partir de dados do INE", "frequencia": "anual"}, hoje)
 
 
+POPULACAO = os.path.join(PASTA, "populacao.json")
+
+
+def atualizar_populacao(hoje: datetime) -> bool:
+    """População a 1 de janeiro, saldo natural e saldo migratório de Portugal (Eurostat demo_gind)."""
+    series = {"populacao": {}, "natural": {}, "migratorio": {}}
+    for nome, ind in (("populacao", "JAN"), ("natural", "NATGROW"), ("migratorio", "CNMIGRATNET")):
+        try:
+            series[nome] = eurostat("demo_gind", {"geo": "PT", "indic_de": ind}, {"freq": ["A"], "indic_de": [ind]})
+            print(f"{nome}: {len(series[nome])} anos (Eurostat demo_gind, {ind})")
+        except Exception as e:
+            print(f"{nome}: Eurostat falhou ({e})", file=sys.stderr)
+    return gravar_simples(POPULACAO, series, {"fonte": "Eurostat (demo_gind), a partir de dados do INE", "frequencia": "anual",
+                                              "nota": "populacao = população a 1 de janeiro de cada ano"}, hoje)
+
+
 # ================================================================ mercados e combustíveis
 MERCADOS = os.path.join(PASTA, "mercados.json")
 YAHOO = os.environ.get("YAHOO_URL", "https://query1.finance.yahoo.com/v8/finance/chart/")
@@ -1202,7 +1219,7 @@ def main() -> int:
               "a tarefa volta a tentar amanhã.", file=sys.stderr)
         tarefas = []
     resultados = []
-    for tarefa in tarefas + [atualizar_migracao, atualizar_previsoes]:
+    for tarefa in tarefas + [atualizar_migracao, atualizar_populacao, atualizar_previsoes]:
         try:
             resultados.append(tarefa(hoje))
         except Exception as e:
