@@ -24,6 +24,7 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 | Juros da dívida: Portugal vs Alemanha | Os mercados confiam em Portugal? | Juros das obrigações a 10 anos e diferença (spread) |
 | Dívida pública e défice | As contas públicas estão a melhorar? | Dívida pública e saldo orçamental, em % do PIB |
 | Poupança e endividamento das famílias | As famílias estão mais ou menos vulneráveis? | Taxa de poupança e empréstimos em % do rendimento disponível, Portugal e zona euro |
+| População residente | Quantas pessoas vivem em Portugal e porque está a mudar? | População no fim de cada ano, saldo natural (nascimentos − mortes) e saldo migratório |
 
 ### Habitação
 
@@ -92,6 +93,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
     ├── construcao.json                 # fogos licenciados e concluídos
     ├── transacoes.json                 # casas vendidas
     ├── migracao.json                   # imigrantes e emigrantes
+    ├── populacao.json                  # população, saldo natural e saldo migratório
     ├── mercados.json                   # petróleo, gás, ouro, prata, bolsas, câmbio e combustíveis
     ├── previsoes.json                  # previsões do FMI para Portugal
     ├── estado.json                     # quando foi a última ida ao INE com sucesso
@@ -107,7 +109,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
 | [BCE Data Portal](https://data.ecb.europa.eu) | Euribor e taxas oficiais (FM), inflação (HICP), contas nacionais (MNA), desemprego (LFSI), preços da habitação (RESR), crédito novo (MIR), balança de pagamentos (BP6), juros de longo prazo (IRS), finanças públicas (GFS), contas das famílias (QSA) |
 | [INE](https://www.ine.pt) | Preço mediano das casas vendidas por concelho (0012234), rendas de novos contratos, fogos licenciados e concluídos (0012778), vendas de alojamentos |
 | [FMI – World Economic Outlook](https://www.imf.org/external/datamapper) | Previsões para Portugal: inflação, PIB, desemprego, balança corrente, dívida e saldo orçamental |
-| [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz) e emigração (migr_emi1ctz) |
+| [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz), emigração (migr_emi1ctz) e população residente (demo_gind) |
 | [Comissão Europeia – Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en) | Preço médio da gasolina 95 e do gasóleo em Portugal, com impostos |
 | Yahoo Finance / Stooq | Brent, gás TTF, ouro, prata, PSI, Euro Stoxx 50, S&P 500, Nasdaq, MSCI World, IWDA, EUNL, bitcoin, ethereum (dados de mercado, **não oficiais**) |
 

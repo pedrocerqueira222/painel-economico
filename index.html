@@ -25,6 +25,7 @@
     --lic: rgba(183,128,26,.55); --lic-s: #B7801A; --con: rgba(31,122,116,.65); --con-s: #1F7A74;
     --sales: rgba(58,110,165,.5); --sales-s: #3A6EA5; --cred: #8A3B72;
     --imm-b: rgba(46,125,79,.5); --imm-s: #2E7D4F; --emi-b: rgba(192,86,43,.45); --emi-s: #C0562B; --net-s: #17202B;
+    --pop: #1F4E79; --nat-b: rgba(138,59,114,.5); --nat-s: #8A3B72; --mig-b: rgba(46,125,79,.5); --mig-s: #2E7D4F;
     --up: #B23A2E; --down: #2E7D4F; --flat: #5B6675;
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top, 0px);
@@ -44,6 +45,7 @@
       --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
       --sales: rgba(127,168,218,.5); --sales-s: #7FA8DA; --cred: #CF7FB5;
       --imm-b: rgba(108,194,148,.5); --imm-s: #6CC294; --emi-b: rgba(238,142,98,.45); --emi-s: #EE8E62; --net-s: #E7ECF1;
+      --pop: #8FB8E3; --nat-b: rgba(207,127,181,.5); --nat-s: #CF7FB5; --mig-b: rgba(108,194,148,.5); --mig-s: #6CC294;
       --up: #E57A6E; --down: #6CC294; --flat: #9AA6B4;
     }
   }
@@ -60,6 +62,7 @@
     --lic: rgba(224,174,74,.55); --lic-s: #E0AE4A; --con: rgba(92,194,184,.6); --con-s: #5CC2B8;
     --sales: rgba(127,168,218,.5); --sales-s: #7FA8DA; --cred: #CF7FB5;
     --imm-b: rgba(108,194,148,.5); --imm-s: #6CC294; --emi-b: rgba(238,142,98,.45); --emi-s: #EE8E62; --net-s: #E7ECF1;
+      --pop: #8FB8E3; --nat-b: rgba(207,127,181,.5); --nat-s: #CF7FB5; --mig-b: rgba(108,194,148,.5); --mig-s: #6CC294;
     --up: #E57A6E; --down: #6CC294; --flat: #9AA6B4;
   }
   *, *::before, *::after { box-sizing: inherit; }
@@ -2744,8 +2747,95 @@ const FAM = {
 };
 
 
+/* =====================================================================
+   MÓDULO — População residente (Eurostat, a partir de dados do INE)
+   ===================================================================== */
+const EUROSTAT = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/";
+// lê uma série anual de um conjunto JSON-stat do Eurostat: { "AAAA": valor }
+function eurostatAnnual(j) {
+  const ids = j.id, size = j.size, stride = []; let acc = 1;
+  for (let k = ids.length - 1; k >= 0; k--) { stride[k] = acc; acc *= size[k]; }
+  let base = 0;
+  ids.forEach((dim, k) => { if (dim !== "time") { const idx = j.dimension[dim].category.index; base += Math.min(...Object.values(idx)) * stride[k]; } });
+  const tk = ids.indexOf("time"), out = {};
+  for (const [t, pos] of Object.entries(j.dimension.time.category.index)) { const v = j.value[base + pos * stride[tk]]; if (v != null) out[t] = +v; }
+  return out;
+}
+const POP = {
+  key: "pop", sourceName: "Eurostat",
+  title: "População residente em Portugal",
+  defaultYears: 0, perYear: 1,
+  source: `População: número de pessoas a viver em Portugal no fim de cada ano (estimativa a 1 de janeiro do ano seguinte).
+    Saldo natural: nascimentos menos mortes. Saldo migratório: pessoas que chegaram menos as que saíram (inclui pequenos acertos estatísticos). As duas barras, no eixo da direita, somam a variação da população nesse ano.
+    Fonte: Eurostat (demo_gind), a partir de dados do INE; copiado pela tarefa do GitHub.`,
+  series: [
+    { id: "POP", label: "População", short: "População", color: "--pop" },
+    { id: "NAT", label: "Saldo natural (nascimentos − mortes)", short: "Saldo natural", color: "--nat-b", stroke: "--nat-s" },
+    { id: "MIG", label: "Saldo migratório (chegam − saem)", short: "Saldo migratório", color: "--mig-b", stroke: "--mig-s" },
+  ],
+  maxAge: 6 * 3600e3,
+  async load() {
+    let raw = null, errors = [];
+    const f = await ghFile("populacao.json");
+    if (f?.valores?.populacao) raw = Object.fromEntries(["populacao", "natural", "migratorio"].map(n => [n, Object.fromEntries(f.periodos.map((p, k) => [p, f.valores[n]?.[k]]).filter(([, v]) => v != null))]));
+    else {
+      // o ficheiro ainda não existe: tenta o Eurostat diretamente
+      try {
+        const get = async ind => { const r = await fetchTimeout(EUROSTAT + "demo_gind?format=JSON&lang=EN&geo=PT&indic_de=" + ind, 30000); if (!r.ok) throw new Error("erro " + r.status); return eurostatAnnual(await r.json()); };
+        const [p, n, m] = await Promise.all(["JAN", "NATGROW", "CNMIGRATNET"].map(get));
+        raw = { populacao: p, natural: n, migratorio: m };
+      } catch (e) { throw ghMissing(); }
+    }
+    // população a 1 de janeiro de A+1 = população no fim do ano A
+    const P = {}; for (const y in raw.populacao) P[String(+y - 1)] = raw.populacao[y];
+    const periods = [...new Set([...Object.keys(P), ...Object.keys(raw.natural), ...Object.keys(raw.migratorio)])].sort();
+    return { periods, values: { POP: periods.map(y => P[y] ?? null), NAT: periods.map(y => raw.natural[y] ?? null), MIG: periods.map(y => raw.migratorio[y] ?? null) }, errors, fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const P = d.values.POP, N = d.values.NAT, M = d.values.MIG, i = lastIdx(P);
+    if (i < 1) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const ch = P[i] - P[i - 1], pct = ch / P[i - 1] * 100, y = d.periods[i];
+    let text, color;
+    if (pct >= 0.3) { text = "A população está a crescer"; color = "var(--down)"; }
+    else if (pct <= -0.1) { text = "A população está a diminuir"; color = "var(--up)"; }
+    else { text = "A população está estável"; color = "var(--flat)"; }
+    const mil = v => fmt(Math.round(Math.abs(v) / 1000), 0) + " mil";
+    let msg = `No fim de ${y}, viviam em Portugal cerca de ${fmt(P[i] / 1e6, 2)} milhões de pessoas, ${ch >= 0 ? "mais" : "menos"} ${mil(ch)} do que um ano antes (${sign(pct)}${fmt(Math.abs(pct), 1)}%).`;
+    if (N[i] != null && M[i] != null) {
+      msg += N[i] < 0 ? ` Morreram mais ${mil(N[i])} pessoas do que as que nasceram` : ` Nasceram mais ${mil(N[i])} pessoas do que as que morreram`;
+      msg += `, e a migração ${M[i] >= 0 ? "acrescentou" : "retirou"} ${mil(M[i])}.`;
+      if (N[i] < 0 && M[i] > 0 && ch > 0) msg += " Sem a migração, a população estaria a diminuir.";
+    }
+    let lo = 0; for (let k = 0; k <= i; k++) if (P[k] != null && (P[lo] == null || P[k] < P[lo])) lo = k;
+    const k10 = i - 10; if (k10 >= 0 && P[k10] != null) msg += ` Há dez anos, no fim de ${d.periods[k10]}, eram ${fmt(P[k10] / 1e6, 2)} milhões.`;
+    if (lo > 0 && lo < i && i - lo <= 15) msg += ` O valor mais baixo recente foi em ${d.periods[lo]} (${fmt(P[lo] / 1e6, 2)} milhões).`;
+    return { text, color, msg };
+  },
+  rates(d) {
+    const P = d.values.POP, i = lastIdx(P);
+    const out = [{ id: "POP", name: "População · fim de " + (i >= 0 ? d.periods[i] : "—"), value: i >= 0 ? P[i] / 1e6 : null, d: 2, unit: " milhões",
+      deltas: i >= 1 ? deltaHTML(P[i] / 1000, P[i - 1] / 1000, "mil pessoas vs ano anterior", 0, true, "") : "" }];
+    for (const id of ["NAT", "MIG"]) {
+      const a = d.values[id], j = lastIdx(a), s = this.series.find(x => x.id === id);
+      out.push({ id, name: s.short + (j >= 0 ? " · " + d.periods[j] : ""), value: j >= 0 ? a[j] / 1000 : null, d: 0, unit: " mil", signed: true,
+        deltas: j >= 1 ? deltaHTML(a[j] / 1000, a[j - 1] / 1000, "mil vs ano anterior", 0, true, "") : "" });
+    }
+    return out;
+  },
+  datasets(d, start, end, visible) {
+    return [lineSet(this.series[0], d.values.POP.slice(start, end), visible, { yAxisID: "y", borderWidth: 2.75, pointRadius: 2 }),
+            barSet(this.series[1], d.values.NAT.slice(start, end), visible, { yAxisID: "y2" }),
+            barSet(this.series[2], d.values.MIG.slice(start, end), visible, { yAxisID: "y2" })];
+  },
+  y2: { tick: v => sign(v) + fmt(Math.abs(v) / 1000, 0) + " mil" },
+  label: p => p,
+  tooltip: (s, v) => s.id === "POP" ? ` População: ${fmt(v, 0)} pessoas` : ` ${s.short}: ${sign(v)}${fmt(Math.abs(v), 0)} pessoas`,
+  yTick: v => fmt(v / 1e6, 2) + " M",
+};
+
+
 /* ---------- ordem dos gráficos ---------- */
-const MODULES = [INFL, INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, FAM, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS, ETFS, CRYPTO];
+const MODULES = [INFL, INFWAGE, BCEEUR, GDPUNE, ECOCOMP, TRADE, BONDS, GOV, FAM, POP, HPIPT, HOUSE, HOUSEWAGE, OVER, RENT, MRATE, MLOANS, MORT, BUILD, DEMAND, MIGR, FUEL, OIL, METALS, FX, STOCKS, ETFS, CRYPTO];
 /* =====================================================================
    PREVISÕES: FMI (World Economic Outlook) e expectativas do mercado (curva de juros do BCE)
    ===================================================================== */
