@@ -2622,6 +2622,52 @@ const ETFS = {
   yTick: v => fmt(v, 0) + " €",
 };
 
+/* ---------- PPR Optimize Agressivo ---------- */
+const PPR = {
+  byDate: true, key: "ppr", container: "modules-mkt", sourceName: "GitHub",
+  title: "PPR Optimize Agressivo",
+  defaultYears: 5, perYear: 252,
+  source: `Valor da unidade de participação (UP) do Optimize Capital Reforma PPR/OICVM Agressivo (ISIN PTOPZEHM0017), um PPR que pode investir até 100% em ações e que começou a 31 de dezembro de 2018.
+    O valor da UP já desconta a comissão de gestão do fundo, mas não as comissões de subscrição/resgate nem os impostos. Os fundos publicam o valor com um ou dois dias úteis de atraso.
+    Fonte: Yahoo Finance (dados de mercado, não oficiais), copiados pela tarefa do GitHub; o valor oficial está na CMVM e na Optimize. Rentabilidades passadas não garantem rentabilidades futuras; isto não é uma recomendação de investimento.`,
+  series: [
+    { id: "ppr", label: "PPR Optimize Agressivo", short: "UP", color: "--lis" },
+  ],
+  maxAge: 3 * 3600e3,
+  async load(prev, force) {
+    const j = await mercados(force), a = serieMap(j.series.ppr_optimize);
+    const periods = Object.keys(a).sort();
+    if (!periods.length) throw new Error("ainda não há dados do PPR; corre a tarefa no GitHub");
+    return { periods, values: { ppr: periods.map(d => a[d]) }, note: mktNote(j), errors: [], fetchedAt: Date.now() };
+  },
+  verdict(d) {
+    const P = d.periods, A = d.values.ppr, i = lastIdx(A);
+    if (i < 0) return { text: "Sem dados suficientes", color: "var(--flat)", msg: "" };
+    const ytd = varAno(P, A), y1 = varDias(P, A, 365), y5 = varDias(P, A, 1826), m1 = varDias(P, A, 30), near = perto52(P, A);
+    let text, color;
+    if (m1 != null && m1 <= -7) { text = "O PPR está a cair"; color = "var(--up)"; }
+    else if (near != null && near >= 0.98) { text = "O PPR está em máximos"; color = "var(--down)"; }
+    else if (m1 != null && m1 >= 3) { text = "O PPR está a subir"; color = "var(--down)"; }
+    else { text = "O PPR está estável"; color = "var(--flat)"; }
+    let msg = `Em ${dayLabel(P[i])}, cada unidade valia ${fmt(A[i], 4)} €: ${pctTxt(ytd)} desde o início do ano, ${pctTxt(y1)} num ano${y5 != null ? " e " + pctTxt(y5, 0) + " em 5 anos" : ""}.`;
+    if (y5 != null) msg += ` Quem pôs 1 000 € há 5 anos teria hoje cerca de ${fmt(Math.round(1000 * (1 + y5 / 100) / 10) * 10, 0)} € (antes de impostos).`;
+    if (near != null && near < 0.98) msg += ` Está ${fmt((1 - near) * 100, 1)}% abaixo do máximo dos últimos 12 meses.`;
+    return { text, color, msg: msg + (d.note || "") };
+  },
+  rates(d) {
+    const P = d.periods, a = d.values.ppr, i = lastIdx(a);
+    return [{ id: "ppr", name: "Valor da UP" + (i >= 0 ? " · " + dLabel(P[i]) : ""), value: i >= 0 ? a[i] : null, d: 4, unit: " €",
+              deltas: deltaHTML(varAno(P, a), 0, "desde o início do ano", 1, true, "%") + deltaHTML(varDias(P, a, 365), 0, "num ano", 1, true, "%") + deltaHTML(varDias(P, a, 1826), 0, "em 5 anos", 0, true, "%") }];
+  },
+  datasets(d, start, end, visible) {
+    return this.series.map(s => ({ type: "line", label: s.label, data: d.values[s.id].slice(start, end), hidden: !visible[s.id],
+      borderColor: css(s.color), backgroundColor: css(s.color), borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.1, spanGaps: true }));
+  },
+  label: dLabel,
+  tooltip: (s, v) => ` ${s.short}: ${fmt(v, 4)} €`,
+  yTick: v => fmt(v, 2) + " €",
+};
+
 /* ---------- Criptomoedas ---------- */
 const CRYPTO = {
   byDate: true, key: "crypto", container: "modules-mkt", sourceName: "GitHub",
@@ -2856,7 +2902,7 @@ const LAYOUT = [
   ["modules-hab",  "Preços e rendas",          [HPIPT, HOUSE, RENT, HOUSEWAGE, OVER]],
   ["modules-hab",  "Procura e construção",     [DEMAND, BUILD]],
   ["modules-hab",  "Crédito à habitação",      [MRATE, MLOANS, MORT]],
-  ["modules-mkt",  "Ações e criptomoedas",     [STOCKS, ETFS, CRYPTO]],
+  ["modules-mkt",  "Ações e criptomoedas",     [STOCKS, ETFS, PPR, CRYPTO]],
   ["modules-mkt",  "Matérias-primas e câmbio", [OIL, METALS, FX]],
 ];
 const MODULES = LAYOUT.flatMap(([container, group, ms]) => ms.map(m => Object.assign(m, { container, group })));

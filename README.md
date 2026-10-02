@@ -88,6 +88,7 @@ Cada gráfico abre com um clique no título e mostra um comentário automático,
 |---|---|---|
 | Bolsas | Como estão os mercados acionistas? | PSI, Euro Stoxx 50, S&P 500, Nasdaq e MSCI World, todos a começar em 100 |
 | MSCI World: IWDA & EUNL | Como está o ETF mais usado para investir no mundo? | Preço em € do iShares Core MSCI World em Amesterdão (IWDA) e na Xetra (EUNL) |
+| PPR Optimize Agressivo | Como está o PPR de ações da Optimize? | Valor em € da unidade de participação do Optimize Capital Reforma PPR/OICVM Agressivo (ISIN PTOPZEHM0017) |
 | Bitcoin e Ethereum | Como estão as criptomoedas? | Preço em € e distância ao máximo |
 
 **Matérias-primas e câmbio**
@@ -154,7 +155,7 @@ Tudo é público e gratuito. Não é preciso nenhuma chave, conta paga ou servid
 | [FMI – World Economic Outlook](https://www.imf.org/external/datamapper) | Previsões para Portugal: inflação, PIB, desemprego, balança corrente, dívida e saldo orçamental |
 | [Eurostat](https://ec.europa.eu/eurostat) | Imigração (migr_imm1ctz), emigração (migr_emi1ctz) e população residente (demo_gind) |
 | [Comissão Europeia – Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en) | Preço médio da gasolina 95 e do gasóleo em Portugal, com impostos |
-| Yahoo Finance / Stooq | Brent, gás TTF, ouro, prata, PSI, Euro Stoxx 50, S&P 500, Nasdaq, MSCI World, IWDA, EUNL, bitcoin, ethereum (dados de mercado, **não oficiais**) |
+| Yahoo Finance / Stooq | Brent, gás TTF, ouro, prata, PSI, Euro Stoxx 50, S&P 500, Nasdaq, MSCI World, IWDA, EUNL, PPR Optimize Agressivo, bitcoin, ethereum (dados de mercado, **não oficiais**) |
 
 Cada gráfico tem por baixo uma nota com a definição exata dos dados e a sua origem.
 
