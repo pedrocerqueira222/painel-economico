@@ -789,7 +789,27 @@ ATIVOS = {
     "eunl":      ("EUNL.DE",   None,       "iShares Core MSCI World (EUNL, Xetra)",      "EUR"),
     "btc":       ("BTC-EUR",   None,       "Bitcoin",                   "EUR"),
     "eth":       ("ETH-EUR",   None,       "Ethereum",                  "EUR"),
+    # fundos sem símbolo fixo: "isin:..." faz a tarefa procurar o símbolo do Yahoo pelo ISIN (pode-se forçar com PPR_OPTIMIZE_YAHOO)
+    "ppr_optimize": (os.environ.get("PPR_OPTIMIZE_YAHOO") or "isin:PTOPZEHM0017", None,
+                     "Optimize Capital Reforma PPR/OICVM Agressivo (valor da UP)", "EUR"),
 }
+YAHOO_PESQUISA = os.environ.get("YAHOO_SEARCH_URL", "https://query2.finance.yahoo.com/v1/finance/search")
+
+
+def simbolo_por_isin(isin: str, antigo: str | None = None) -> str:
+    """Procura no Yahoo o símbolo de um fundo pelo ISIN; se falhar, usa o que ficou guardado da última vez."""
+    try:
+        url = YAHOO_PESQUISA + "?" + urllib.parse.urlencode({"q": isin, "quotesCount": 6, "newsCount": 0})
+        req = urllib.request.Request(url, headers={**CABECALHOS, "Accept": "application/json"})
+        cot = json.loads(ler_url(req, limite=30).decode("utf-8")).get("quotes") or []
+        cot.sort(key=lambda q: 0 if q.get("quoteType") == "MUTUALFUND" else 1)
+        if cot and cot[0].get("symbol"):
+            return cot[0]["symbol"]
+    except Exception as e:
+        print(f"Mercados, pesquisa do ISIN {isin} falhou ({e})", file=sys.stderr)
+    if antigo:
+        return antigo
+    raise RuntimeError(f"o Yahoo não devolveu nenhum símbolo para o ISIN {isin}")
 
 
 def yahoo(simbolo: str) -> dict:
@@ -924,7 +944,10 @@ def atualizar_mercados(hoje: datetime) -> bool:
     series = {}
     for nome, (ysym, ssym, desc, unid) in ATIVOS.items():
         valores, fonte = {}, None
+        velho = (antigo.get("series") or {}).get(nome) or {}
         try:
+            if ysym.startswith("isin:"):
+                ysym = simbolo_por_isin(ysym[5:], velho.get("simbolo"))
             valores, fonte = yahoo(ysym), f"Yahoo Finance ({ysym})"
         except Exception as e:
             print(f"Mercados, {desc}: Yahoo falhou ({e})", file=sys.stderr)
@@ -934,12 +957,13 @@ def atualizar_mercados(hoje: datetime) -> bool:
                 except Exception as e2:
                     print(f"Mercados, {desc}: Stooq falhou ({e2})", file=sys.stderr)
         valores = {d: v for d, v in valores.items() if d < hoje_txt}   # só fechos de dias já terminados
-        velho = (antigo.get("series") or {}).get(nome) or {}
         juntos = {**dict(zip(velho.get("datas", []), velho.get("valores", []))), **valores}
         if juntos:
             datas = sorted(juntos)
             series[nome] = {"nome": desc, "unidade": unid, "fonte": fonte or velho.get("fonte"),
                             "datas": datas, "valores": [juntos[d] for d in datas]}
+            if ATIVOS[nome][0].startswith("isin:"):   # guardar o símbolo encontrado, para a próxima vez
+                series[nome]["simbolo"] = ysym if valores and not ysym.startswith("isin:") else velho.get("simbolo")
             print(f"Mercados, {desc}: {len(valores)} dias novos/atualizados, último {datas[-1]}")
     try:
         comb = combustiveis()
