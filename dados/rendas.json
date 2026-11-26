@@ -1,7 +1,10 @@
 {
- "fonte": "INE, indicador 0014711 (renda mediana por m² dos novos contratos, anual)",
- "indicador": "0014711",
- "frequencia": "anual",
+ "fonte": "INE, renda mediana por m² dos novos contratos, últimos 12 meses (Metodologia 2026)",
+ "indicadores": {
+  "concelhos": "0014771",
+  "regioes": "0014696"
+ },
+ "frequencia": "trimestral",
  "formatos": {
   "0012234": {
    "prefixo": "S5A",
@@ -25,27 +28,76 @@
   }
  },
  "periodos": [
-  "2025"
+  "2024-Q3",
+  "2024-Q4",
+  "2025-Q1",
+  "2025-Q2",
+  "2025-Q3",
+  "2025-Q4",
+  "2026-Q1",
+  "2026-Q2"
  ],
  "valores": {
   "Portugal": [
-   9.29
+   8.3,
+   8.47,
+   8.73,
+   8.92,
+   9.11,
+   9.29,
+   9.5,
+   9.76
   ],
   "Lisboa": [
-   16.88
+   16.16,
+   16.31,
+   16.42,
+   16.67,
+   16.73,
+   16.88,
+   17.22,
+   17.43
   ],
   "Porto": [
-   14.13
+   13.02,
+   13.21,
+   13.55,
+   13.74,
+   13.95,
+   14.13,
+   14.29,
+   14.48
   ],
   "Matosinhos": [
-   12.12
+   11.4,
+   11.44,
+   11.69,
+   11.83,
+   12.0,
+   12.12,
+   12.2,
+   12.48
   ],
   "Maia": [
-   9.59
+   8.38,
+   8.67,
+   8.99,
+   9.21,
+   9.41,
+   9.59,
+   9.71,
+   9.85
   ],
   "Valongo": [
-   8.04
+   7.37,
+   7.65,
+   7.9,
+   8.05,
+   8.03,
+   8.04,
+   8.24,
+   8.59
   ]
  },
- "atualizado": "2026-11-12T11:01:54Z"
+ "atualizado": "2026-11-26T05:00:01Z"
 }
